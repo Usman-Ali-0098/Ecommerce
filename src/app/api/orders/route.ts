@@ -5,15 +5,35 @@ import { prisma } from "@/lib/prisma";
 
 const TAX_RATE = 0.1;
 
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function createOrderNumber() {
+  const timestamp = Date.now()
+    .toString()
+    .slice(-8);
+
+  const random = Math.floor(
+    1000 + Math.random() * 9000
+  );
+
+  return `ORD-${timestamp}-${random}`;
+}
+
 export async function POST(request: Request) {
   try {
+    /*
+     * 1. Authentication
+     */
     const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized.",
+          message:
+            "You must be logged in to place an order.",
         },
         {
           status: 401,
@@ -35,33 +55,41 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * 2. Read request body
+     */
     const body = await request.json();
 
+    const rawCartItemIds =
+      body?.cartItemIds;
+
+    if (!Array.isArray(rawCartItemIds)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Cart item IDs are required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
     /*
-     * Frontend sends:
-     *
-     * {
-     *   cartItemIds: ["id1", "id2"]
-     * }
+     * Remove invalid IDs and duplicates.
      */
-    const cartItemIds = Array.isArray(
-      body.cartItemIds
-    )
-      ? body.cartItemIds.filter(
-          (id: unknown): id is string =>
+    const cartItemIds = [
+      ...new Set(
+        rawCartItemIds.filter(
+          (id): id is string =>
             typeof id === "string" &&
             id.trim().length > 0
         )
-      : [];
-
-    /*
-     * Remove duplicate IDs.
-     */
-    const uniqueCartItemIds = [
-      ...new Set(cartItemIds),
+      ),
     ];
 
-    if (uniqueCartItemIds.length === 0) {
+    if (cartItemIds.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -75,17 +103,14 @@ export async function POST(request: Request) {
     }
 
     /*
-     * Get selected cart items from database.
-     *
-     * Important:
-     * cart.userId ensures these items
-     * actually belong to the logged-in user.
+     * 3. Load only selected cart items
+     * belonging to this user.
      */
     const cartItems =
       await prisma.cartItem.findMany({
         where: {
           id: {
-            in: uniqueCartItemIds,
+            in: cartItemIds,
           },
 
           cart: {
@@ -110,19 +135,12 @@ export async function POST(request: Request) {
       });
 
     /*
-     * Example:
-     *
-     * Browser sent 3 item IDs
-     * Database found only 2
-     *
-     * This can mean:
-     * - invalid ID
-     * - another user's cart item
-     * - item already deleted
+     * If the browser sent 3 IDs but only
+     * 2 are found, one ID is invalid or
+     * belongs to another user.
      */
     if (
-      cartItems.length !==
-      uniqueCartItemIds.length
+      cartItems.length !== cartItemIds.length
     ) {
       return NextResponse.json(
         {
@@ -137,7 +155,7 @@ export async function POST(request: Request) {
     }
 
     /*
-     * First validation before transaction.
+     * 4. Initial availability checks
      */
     for (const item of cartItems) {
       const variant = item.variant;
@@ -151,7 +169,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
-            message: `${product.name} is no longer available.`,
+            message: `${product.name} is currently unavailable.`,
           },
           {
             status: 400,
@@ -159,11 +177,11 @@ export async function POST(request: Request) {
         );
       }
 
-      if (variant.stock <= 0) {
+      if (item.quantity < 1) {
         return NextResponse.json(
           {
             success: false,
-            message: `${product.name} is out of stock.`,
+            message: `Invalid quantity for ${product.name}.`,
           },
           {
             status: 400,
@@ -171,13 +189,15 @@ export async function POST(request: Request) {
         );
       }
 
-      if (
-        item.quantity > variant.stock
-      ) {
+      if (variant.stock < item.quantity) {
         return NextResponse.json(
           {
             success: false,
-            message: `Only ${variant.stock} item(s) of ${product.name} are available.`,
+
+            message:
+              variant.stock === 0
+                ? `${product.name} is out of stock.`
+                : `Only ${variant.stock} item(s) of ${product.name} are available.`,
           },
           {
             status: 400,
@@ -187,110 +207,94 @@ export async function POST(request: Request) {
     }
 
     /*
-     * Calculate order amounts using
-     * CURRENT DATABASE prices.
+     * 5. Calculate all money on server.
      *
      * Never trust subtotal/tax/total
-     * sent from the frontend.
+     * sent from the browser.
      */
-    const subtotal = cartItems.reduce(
-      (sum, item) => {
-        const unitPrice = Number(
-          item.variant.price
-        );
-
-        return (
+    const subtotal = roundMoney(
+      cartItems.reduce(
+        (sum, item) =>
           sum +
-          unitPrice * item.quantity
-        );
-      },
-      0
+          Number(item.variant.price) *
+            item.quantity,
+        0
+      )
     );
 
-    const tax =
-      subtotal * TAX_RATE;
+    const tax = roundMoney(
+      subtotal * TAX_RATE
+    );
 
-    const total =
-      subtotal + tax;
+    const total = roundMoney(
+      subtotal + tax
+    );
 
-    /*
-     * Human-readable order number.
-     *
-     * Database still has its own cuid ID.
-     */
     const orderNumber =
       createOrderNumber();
 
     /*
-     * TRANSACTION
-     *
-     * Everything inside this block
-     * succeeds together.
-     *
-     * If one operation fails,
-     * everything is rolled back.
+     * 6. Entire checkout is one
+     * database transaction.
      */
     const order =
       await prisma.$transaction(
         async (tx) => {
           /*
-           * STEP 1:
-           * Recheck every variant inside
-           * the transaction.
+           * STEP A
+           * Atomically reserve/decrease stock.
+           *
+           * The database only updates a
+           * variant when:
+           *
+           * stock >= ordered quantity
            */
           for (const item of cartItems) {
-            const currentVariant =
-              await tx.productVariant.findUnique({
+            const stockUpdate =
+              await tx.productVariant.updateMany({
                 where: {
-                  id: item.variant.id,
-                },
+                  id: item.variantId,
 
-                select: {
-                  id: true,
-                  stock: true,
                   isActive: true,
 
-                  product: {
-                    select: {
-                      name: true,
-                      isActive: true,
+                  stock: {
+                    gte: item.quantity,
+                  },
 
-                      category: {
-                        select: {
-                          isActive: true,
-                        },
-                      },
+                  product: {
+                    isActive: true,
+
+                    category: {
+                      isActive: true,
                     },
+                  },
+                },
+
+                data: {
+                  stock: {
+                    decrement:
+                      item.quantity,
                   },
                 },
               });
 
+            /*
+             * If count is zero, stock or
+             * product availability changed
+             * after our initial check.
+             */
             if (
-              !currentVariant ||
-              !currentVariant.isActive ||
-              !currentVariant.product
-                .isActive ||
-              !currentVariant.product
-                .category.isActive
+              stockUpdate.count !== 1
             ) {
               throw new Error(
-                `VARIANT_UNAVAILABLE:${item.variant.product.name}`
-              );
-            }
-
-            if (
-              currentVariant.stock <
-              item.quantity
-            ) {
-              throw new Error(
-                `INSUFFICIENT_STOCK:${item.variant.product.name}:${currentVariant.stock}`
+                `INSUFFICIENT_STOCK:${item.variant.product.name}`
               );
             }
           }
 
           /*
-           * STEP 2:
-           * Create main Order row.
+           * STEP B
+           * Create the order.
            */
           const newOrder =
             await tx.order.create({
@@ -298,49 +302,51 @@ export async function POST(request: Request) {
                 orderNumber,
                 userId,
 
+                status: "PENDING",
+
                 subtotal,
                 tax,
                 total,
-
-                status: "PENDING",
               },
             });
 
           /*
-           * STEP 3:
-           * Create OrderItem snapshots.
-           *
-           * These values remain historically
-           * correct even if product data changes
-           * in the future.
+           * STEP C
+           * Create permanent order-item
+           * snapshots.
            */
           await tx.orderItem.createMany({
             data: cartItems.map(
               (item) => {
-                const unitPrice = Number(
-                  item.variant.price
-                );
+                const variant =
+                  item.variant;
+
+                const product =
+                  variant.product;
+
+                const unitPrice =
+                  Number(variant.price);
 
                 return {
                   orderId:
                     newOrder.id,
 
                   variantId:
-                    item.variant.id,
+                    variant.id,
 
                   productName:
-                    item.variant.product.name,
+                    product.name,
 
                   sku:
-                    item.variant.sku,
+                    variant.sku,
 
                   colorName:
-                    item.variant.color
-                      ?.name ?? null,
+                    variant.color?.name ??
+                    null,
 
                   sizeName:
-                    item.variant.size
-                      ?.name ?? null,
+                    variant.size?.name ??
+                    null,
 
                   unitPrice,
 
@@ -348,58 +354,85 @@ export async function POST(request: Request) {
                     item.quantity,
 
                   lineTotal:
-                    unitPrice *
-                    item.quantity,
+                    roundMoney(
+                      unitPrice *
+                        item.quantity
+                    ),
                 };
               }
             ),
           });
 
           /*
-           * STEP 4:
-           * Reduce stock for each
-           * purchased variant.
+           * STEP D
+           * Create customer notification.
+           *
+           * This is inside the same
+           * transaction, which means the
+           * notification cannot exist if
+           * checkout fails.
            */
-          for (const item of cartItems) {
-            await tx.productVariant.update({
-              where: {
-                id: item.variant.id,
-              },
+          await tx.notification.create({
+            data: {
+              userId,
 
-              data: {
-                stock: {
-                  decrement:
-                    item.quantity,
+              orderId:
+                newOrder.id,
+
+              type:
+                "ORDER_PLACED",
+
+              title:
+                "Order Placed Successfully",
+
+              message: `Your order ${newOrder.orderNumber} has been placed successfully.`,
+            },
+          });
+
+          /*
+           * STEP E
+           * Remove ONLY the selected items
+           * from the user's cart.
+           *
+           * Unselected products remain.
+           */
+          const deleted =
+            await tx.cartItem.deleteMany({
+              where: {
+                id: {
+                  in: cartItemIds,
+                },
+
+                cart: {
+                  userId,
                 },
               },
             });
-          }
 
           /*
-           * STEP 5:
-           * Remove ONLY ordered cart items.
-           *
-           * Unselected items stay in cart.
+           * Extra protection against the cart
+           * changing during checkout.
            */
-          await tx.cartItem.deleteMany({
-            where: {
-              id: {
-                in: uniqueCartItemIds,
-              },
-
-              cart: {
-                userId,
-              },
-            },
-          });
+          if (
+            deleted.count !==
+            cartItemIds.length
+          ) {
+            throw new Error(
+              "CART_CHANGED"
+            );
+          }
 
           return newOrder;
         }
       );
 
+    /*
+     * 7. Checkout succeeded.
+     */
     return NextResponse.json(
       {
         success: true,
+
         message:
           "Order placed successfully.",
 
@@ -409,20 +442,17 @@ export async function POST(request: Request) {
           orderNumber:
             order.orderNumber,
 
-          subtotal: Number(
-            order.subtotal
-          ),
-
-          tax: Number(
-            order.tax
-          ),
-
-          total: Number(
-            order.total
-          ),
-
           status:
             order.status,
+
+          subtotal:
+            Number(order.subtotal),
+
+          tax:
+            Number(order.tax),
+
+          total:
+            Number(order.total),
         },
       },
       {
@@ -436,86 +466,64 @@ export async function POST(request: Request) {
     );
 
     /*
-     * Transaction stock error.
+     * Stock changed during checkout.
      */
-    if (
-      error instanceof Error &&
-      error.message.startsWith(
-        "INSUFFICIENT_STOCK:"
-      )
-    ) {
-      const parts =
-        error.message.split(":");
+    if (error instanceof Error) {
+      if (
+        error.message.startsWith(
+          "INSUFFICIENT_STOCK:"
+        )
+      ) {
+        const productName =
+          error.message
+            .split(":")
+            .slice(1)
+            .join(":");
 
-      const productName =
-        parts[1] ??
-        "Product";
+        return NextResponse.json(
+          {
+            success: false,
 
-      const stock =
-        parts[2] ??
-        "0";
+            message: `${productName} no longer has enough stock. Please review your cart and try again.`,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
 
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Only ${stock} item(s) of ${productName} are currently available.`,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
+      /*
+       * Cart was changed while the
+       * transaction was running.
+       */
+      if (
+        error.message ===
+        "CART_CHANGED"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
 
-    /*
-     * Product/variant became unavailable
-     * while transaction was running.
-     */
-    if (
-      error instanceof Error &&
-      error.message.startsWith(
-        "VARIANT_UNAVAILABLE:"
-      )
-    ) {
-      const parts =
-        error.message.split(":");
-
-      const productName =
-        parts[1] ??
-        "Product";
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: `${productName} is no longer available.`,
-        },
-        {
-          status: 400,
-        }
-      );
+            message:
+              "Your cart changed while placing the order. Please refresh your cart and try again.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
     }
 
     return NextResponse.json(
       {
         success: false,
+
         message:
-          "Unable to place order.",
+          "Something went wrong while placing your order.",
       },
       {
         status: 500,
       }
     );
   }
-}
-
-function createOrderNumber() {
-  const timestamp = Date.now()
-    .toString()
-    .slice(-8);
-
-  const random = Math.floor(
-    1000 +
-      Math.random() * 9000
-  );
-
-  return `ORD-${timestamp}-${random}`;
 }

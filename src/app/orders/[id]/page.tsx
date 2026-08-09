@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+
+import {
+  notFound,
+  redirect,
+} from "next/navigation";
 
 import { auth } from "@/auth";
 
@@ -16,7 +20,9 @@ type OrderDetailPageProps = {
 export default async function OrderDetailPage({
   params,
 }: OrderDetailPageProps) {
-  const session = await auth();
+  // Authentication
+  const session =
+    await auth();
 
   if (!session?.user?.id) {
     redirect("/login");
@@ -26,12 +32,20 @@ export default async function OrderDetailPage({
     session.user.id
   );
 
-  if (!Number.isInteger(userId)) {
+  if (
+    !Number.isInteger(
+      userId
+    )
+  ) {
     redirect("/login");
   }
 
-  const { id } = await params;
+  // Next.js dynamic route
+  const { id } =
+    await params;
 
+  // Fetch only this
+  // user's order
   const order =
     await getUserOrderById(
       userId,
@@ -63,9 +77,9 @@ export default async function OrderDetailPage({
             </h1>
           </div>
 
-          {/* Order summary */}
+          {/* Order information */}
           <section className="border-y border-gray-300 py-7">
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-7">
+            <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7">
               <OrderMeta
                 label="Date"
                 value={formatDate(
@@ -117,14 +131,14 @@ export default async function OrderDetailPage({
             </div>
           </section>
 
-          {/* Product Information */}
+          {/* Products */}
           <section className="mt-8">
             <h2 className="mb-5 text-xl font-medium text-gray-900">
               Product Information
             </h2>
 
             <div className="overflow-x-auto border border-gray-200 bg-white">
-              <table className="w-full min-w-[900px] border-collapse">
+              <table className="w-full min-w-[800px] border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left text-sm text-gray-600">
                     <th className="px-4 py-3 font-medium">
@@ -148,10 +162,6 @@ export default async function OrderDetailPage({
                     </th>
 
                     <th className="px-4 py-3 font-medium">
-                      Stock
-                    </th>
-
-                    <th className="px-4 py-3 font-medium">
                       Total
                     </th>
                   </tr>
@@ -161,9 +171,12 @@ export default async function OrderDetailPage({
                   {order.items.map(
                     (item) => (
                       <tr
-                        key={item.id}
+                        key={
+                          item.id
+                        }
                         className="border-b border-gray-200 text-sm text-gray-700 last:border-b-0"
                       >
+                        {/* Product */}
                         <td className="px-4 py-4">
                           <div>
                             <p className="font-medium text-gray-800">
@@ -174,36 +187,40 @@ export default async function OrderDetailPage({
 
                             <p className="mt-1 text-xs text-gray-400">
                               SKU:{" "}
-                              {item.sku}
+                              {
+                                item.sku
+                              }
                             </p>
                           </div>
                         </td>
 
+                        {/* Color */}
                         <td className="px-4 py-4">
                           {item.colorName ??
                             "—"}
                         </td>
 
+                        {/* Size */}
                         <td className="px-4 py-4">
                           {item.sizeName ??
                             "—"}
                         </td>
 
+                        {/* Price */}
                         <td className="px-4 py-4">
                           {formatMoney(
                             item.unitPrice
                           )}
                         </td>
 
+                        {/* Quantity */}
                         <td className="px-4 py-4">
-                          {item.quantity}
+                          {
+                            item.quantity
+                          }
                         </td>
 
-                        <td className="px-4 py-4">
-                          {item.currentStock ??
-                            "—"}
-                        </td>
-
+                        {/* Line total */}
                         <td className="px-4 py-4 font-medium">
                           {formatMoney(
                             item.lineTotal
@@ -248,8 +265,11 @@ function formatMoney(
   return `Rs. ${amount.toLocaleString(
     "en-PK",
     {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits:
+        2,
+
+      maximumFractionDigits:
+        2,
     }
   )}`;
 }

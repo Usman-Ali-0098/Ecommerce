@@ -62,6 +62,7 @@ export async function getUserCart(userId: number) {
 
     return {
       id: item.id,
+
       quantity: item.quantity,
 
       variant: {
@@ -93,6 +94,7 @@ export async function getUserCart(userId: number) {
         image: primaryImage
           ? {
               url: primaryImage.url,
+
               altText:
                 primaryImage.altText ??
                 product.name,
@@ -122,4 +124,36 @@ export async function getUserCart(userId: number) {
     totalItems,
     subtotal,
   };
+}
+
+/*
+ * Used by the header.
+ *
+ * Important:
+ * We calculate SUM(quantity),
+ * not number of CartItem rows.
+ *
+ * Example:
+ * Shirt qty 3
+ * Charger qty 2
+ *
+ * cart count = 5
+ */
+export async function getCartCount(
+  userId: number
+) {
+  const result =
+    await prisma.cartItem.aggregate({
+      where: {
+        cart: {
+          userId,
+        },
+      },
+
+      _sum: {
+        quantity: true,
+      },
+    });
+
+  return result._sum.quantity ?? 0;
 }

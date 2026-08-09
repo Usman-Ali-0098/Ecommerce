@@ -24,8 +24,9 @@ model User {
 
   passwordResetTokens PasswordResetToken[]
 
-  cart   Cart?
-  orders Order[]
+  cart          Cart?
+  orders        Order[]
+  notifications Notification[]
 }
 
 enum Role {
@@ -190,8 +191,9 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user  User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  items OrderItem[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items         OrderItem[]
+  notifications Notification[]
 
   @@index([userId])
   @@index([status])
@@ -227,4 +229,31 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_PROCESSING
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    Int
+  orderId   String?
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@index([orderId])
 }

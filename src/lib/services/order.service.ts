@@ -11,37 +11,52 @@ export async function getUserOrders({
   page = 1,
   pageSize = 20,
 }: GetUserOrdersParams) {
-  const safePage = Math.max(page, 1);
-  const safePageSize = Math.min(
-    Math.max(pageSize, 1),
-    100
+  const safePage = Math.max(
+    page,
+    1
   );
 
+  const safePageSize =
+    Math.min(
+      Math.max(
+        pageSize,
+        1
+      ),
+      100
+    );
+
   const skip =
-    (safePage - 1) * safePageSize;
+    (safePage - 1) *
+    safePageSize;
 
   const [orders, total] =
     await Promise.all([
-      prisma.order.findMany({
-        where: {
-          userId,
-        },
+      prisma.order.findMany(
+        {
+          where: {
+            userId,
+          },
 
-        orderBy: {
-          createdAt: "desc",
-        },
+          orderBy: {
+            createdAt:
+              "desc",
+          },
 
-        skip,
-        take: safePageSize,
+          skip,
 
-        include: {
-          items: {
-            select: {
-              quantity: true,
+          take:
+            safePageSize,
+
+          include: {
+            items: {
+              select: {
+                quantity:
+                  true,
+              },
             },
           },
-        },
-      }),
+        }
+      ),
 
       prisma.order.count({
         where: {
@@ -51,115 +66,178 @@ export async function getUserOrders({
     ]);
 
   return {
-    orders: orders.map((order) => {
-      const productCount =
-        order.items.reduce(
-          (sum, item) =>
-            sum + item.quantity,
-          0
-        );
+    orders: orders.map(
+      (order) => {
+        const productCount =
+          order.items.reduce(
+            (
+              sum,
+              item
+            ) =>
+              sum +
+              item.quantity,
+            0
+          );
 
-      return {
-        id: order.id,
-        orderNumber:
-          order.orderNumber,
-        status: order.status,
-        createdAt:
-          order.createdAt,
-        subtotal: Number(
-          order.subtotal
-        ),
-        tax: Number(
-          order.tax
-        ),
-        total: Number(
-          order.total
-        ),
-        productCount,
-      };
-    }),
+        return {
+          id: order.id,
+
+          orderNumber:
+            order.orderNumber,
+
+          status:
+            order.status,
+
+          createdAt:
+            order.createdAt,
+
+          subtotal:
+            Number(
+              order.subtotal
+            ),
+
+          tax: Number(
+            order.tax
+          ),
+
+          total: Number(
+            order.total
+          ),
+
+          productCount,
+        };
+      }
+    ),
 
     pagination: {
       page: safePage,
-      pageSize: safePageSize,
+
+      pageSize:
+        safePageSize,
+
       total,
-      totalPages: Math.ceil(
-        total / safePageSize
-      ),
+
+      totalPages:
+        Math.ceil(
+          total /
+            safePageSize
+        ),
     },
   };
 }
-
 
 export async function getUserOrderById(
   userId: number,
   orderId: string
 ) {
-  const order = await prisma.order.findFirst({
-    where: {
-      id: orderId,
-      userId,
-    },
-
-    include: {
-      user: {
-        select: {
-          fullName: true,
-        },
-      },
-
-      items: {
-        orderBy: {
-          createdAt: "asc",
+  const order =
+    await prisma.order.findFirst(
+      {
+        where: {
+          id: orderId,
+          userId,
         },
 
         include: {
-          variant: {
+          user: {
             select: {
-              stock: true,
+              fullName:
+                true,
+            },
+          },
+
+          items: {
+            orderBy: {
+              createdAt:
+                "asc",
             },
           },
         },
-      },
-    },
-  });
+      }
+    );
 
   if (!order) {
     return null;
   }
 
+  const productCount =
+    order.items.reduce(
+      (sum, item) =>
+        sum +
+        item.quantity,
+      0
+    );
+
   return {
     id: order.id,
-    orderNumber: order.orderNumber,
-    status: order.status,
-    createdAt: order.createdAt,
+
+    orderNumber:
+      order.orderNumber,
+
+    status:
+      order.status,
+
+    createdAt:
+      order.createdAt,
 
     user: {
-      fullName: order.user.fullName,
+      fullName:
+        order.user.fullName,
     },
 
-    subtotal: Number(order.subtotal),
-    tax: Number(order.tax),
-    total: Number(order.total),
+    subtotal:
+      Number(
+        order.subtotal
+      ),
 
-    productCount: order.items.reduce(
-      (sum, item) =>
-        sum + item.quantity,
-      0
+    tax: Number(
+      order.tax
     ),
 
-    items: order.items.map((item) => ({
-      id: item.id,
-      productName: item.productName,
-      sku: item.sku,
-      colorName: item.colorName,
-      sizeName: item.sizeName,
-      unitPrice: Number(item.unitPrice),
-      quantity: item.quantity,
-      lineTotal: Number(item.lineTotal),
+    total: Number(
+      order.total
+    ),
 
-      currentStock:
-        item.variant?.stock ?? null,
-    })),
+    productCount,
+
+    /*
+     * Notice:
+     *
+     * We use OrderItem snapshots.
+     * We DO NOT read the current
+     * ProductVariant price/color/etc.
+     *
+     * Order history should preserve
+     * what was purchased originally.
+     */
+    items: order.items.map(
+      (item) => ({
+        id: item.id,
+
+        productName:
+          item.productName,
+
+        sku: item.sku,
+
+        colorName:
+          item.colorName,
+
+        sizeName:
+          item.sizeName,
+
+        unitPrice:
+          Number(
+            item.unitPrice
+          ),
+
+        quantity:
+          item.quantity,
+
+        lineTotal:
+          Number(
+            item.lineTotal
+          ),
+      })
+    ),
   };
 }

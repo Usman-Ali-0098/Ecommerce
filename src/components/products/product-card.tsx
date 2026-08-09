@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 
 import Alert from "@/components/ui/alert";
 import { useAlert } from "@/hooks/use-alert";
+import { notifyCartUpdated } from "@/lib/cart-events";
 
 import type {
   PublicProduct,
@@ -192,6 +193,7 @@ export default function ProductCard({
           "Product added to cart successfully.",
         "success"
       );
+      notifyCartUpdated();
 
       setQuantity(1);
     } catch (error) {
