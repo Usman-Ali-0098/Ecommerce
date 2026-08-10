@@ -1,7 +1,14 @@
-import { NextResponse } from "next/server";
+import {
+  NextResponse,
+} from "next/server";
 
-import { getAdminSession } from "@/lib/admin-auth";
-import { prisma } from "@/lib/prisma";
+import {
+  getAdminSession,
+} from "@/lib/admin-auth";
+
+import {
+  prisma,
+} from "@/lib/prisma";
 
 type VariantInput = {
   sku: string;
@@ -35,23 +42,50 @@ async function getUniqueSlug(
     "product";
 
   const existing =
-    await prisma.product.findUnique({
-      where: {
-        slug: baseSlug,
-      },
+    await prisma.product
+      .findUnique({
+        where: {
+          slug: baseSlug,
+        },
 
-      select: {
-        id: true,
-      },
-    });
+        select: {
+          id: true,
+        },
+      });
 
   if (!existing) {
     return baseSlug;
   }
 
-  return `${baseSlug}-${Date.now()
-    .toString()
-    .slice(-6)}`;
+  /*
+   * Keep checking until
+   * a unique slug is found.
+   */
+  let counter = 2;
+
+  while (true) {
+    const candidate =
+      `${baseSlug}-${counter}`;
+
+    const exists =
+      await prisma.product
+        .findUnique({
+          where: {
+            slug:
+              candidate,
+          },
+
+          select: {
+            id: true,
+          },
+        });
+
+    if (!exists) {
+      return candidate;
+    }
+
+    counter++;
+  }
 }
 
 export async function POST(
@@ -59,8 +93,11 @@ export async function POST(
 ) {
   try {
     /*
-     * Admin authentication
+     * -------------------------
+     * ADMIN AUTH
+     * -------------------------
      */
+
     const admin =
       await getAdminSession();
 
@@ -77,6 +114,12 @@ export async function POST(
       );
     }
 
+    /*
+     * -------------------------
+     * BODY
+     * -------------------------
+     */
+
     const body =
       await request.json();
 
@@ -87,26 +130,38 @@ export async function POST(
         : "";
 
     const description =
-      typeof body?.description ===
+      typeof body
+        ?.description ===
       "string"
-        ? body.description.trim()
+        ? body.description
+            .trim()
         : "";
 
-    /*
-     * IMPORTANT:
-     * Category ID is STRING.
-     */
     const categoryId =
-      typeof body?.categoryId ===
-        "string"
-        ? body.categoryId.trim()
+      typeof body
+        ?.categoryId ===
+      "string"
+        ? body.categoryId
+            .trim()
         : "";
 
     const imageUrl =
-      typeof body?.imageUrl ===
+      typeof body
+        ?.imageUrl ===
         "string" &&
       body.imageUrl.trim()
-        ? body.imageUrl.trim()
+        ? body.imageUrl
+            .trim()
+        : null;
+
+    const imagePublicId =
+      typeof body
+        ?.imagePublicId ===
+        "string" &&
+      body.imagePublicId
+        .trim()
+        ? body.imagePublicId
+            .trim()
         : null;
 
     const isActive =
@@ -121,8 +176,11 @@ export async function POST(
         : [];
 
     /*
-     * Basic validation
+     * -------------------------
+     * BASIC VALIDATION
+     * -------------------------
      */
+
     if (!name) {
       return NextResponse.json(
         {
@@ -166,18 +224,46 @@ export async function POST(
     }
 
     /*
-     * Category must exist
+     * URL and publicId should
+     * arrive together.
      */
-    const category =
-      await prisma.category.findUnique({
-        where: {
-          id: categoryId,
+    if (
+      (imageUrl &&
+        !imagePublicId) ||
+      (!imageUrl &&
+        imagePublicId)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Invalid product image information.",
         },
+        {
+          status: 400,
+        }
+      );
+    }
 
-        select: {
-          id: true,
-        },
-      });
+    /*
+     * -------------------------
+     * CATEGORY
+     * -------------------------
+     */
+
+    const category =
+      await prisma.category
+        .findUnique({
+          where: {
+            id:
+              categoryId,
+          },
+
+          select: {
+            id: true,
+            isActive: true,
+          },
+        });
 
     if (!category) {
       return NextResponse.json(
@@ -193,45 +279,59 @@ export async function POST(
     }
 
     /*
-     * Normalize + validate variants
+     * -------------------------
+     * VARIANT VALIDATION
+     * -------------------------
      */
+
     const normalizedVariants:
       VariantInput[] = [];
 
-    for (const rawVariant of variants) {
+    for (
+      const rawVariant
+      of variants
+    ) {
       const sku =
-        typeof rawVariant?.sku ===
+        typeof rawVariant
+          ?.sku ===
         "string"
-          ? rawVariant.sku.trim()
+          ? rawVariant.sku
+              .trim()
+              .toUpperCase()
           : "";
 
       const price =
         Number(
-          rawVariant?.price
+          rawVariant
+            ?.price
         );
 
       const stock =
         Number(
-          rawVariant?.stock
+          rawVariant
+            ?.stock
         );
 
-      /*
-       * IDs remain strings.
-       */
       const colorId =
         typeof rawVariant
           ?.colorId ===
           "string" &&
-        rawVariant.colorId.trim()
-          ? rawVariant.colorId.trim()
+        rawVariant.colorId
+          .trim()
+          ? rawVariant
+              .colorId
+              .trim()
           : null;
 
       const sizeId =
         typeof rawVariant
           ?.sizeId ===
           "string" &&
-        rawVariant.sizeId.trim()
-          ? rawVariant.sizeId.trim()
+        rawVariant.sizeId
+          .trim()
+          ? rawVariant
+              .sizeId
+              .trim()
           : null;
 
       if (!sku) {
@@ -256,7 +356,8 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            message: `Invalid price for ${sku}.`,
+            message:
+              `Invalid price for ${sku}.`,
           },
           {
             status: 400,
@@ -273,7 +374,8 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            message: `Invalid stock for ${sku}.`,
+            message:
+              `Invalid stock for ${sku}.`,
           },
           {
             status: 400,
@@ -293,9 +395,11 @@ export async function POST(
     }
 
     /*
-     * Duplicate SKU validation
-     * inside request.
+     * -------------------------
+     * DUPLICATE REQUEST SKUs
+     * -------------------------
      */
+
     const requestSkus =
       normalizedVariants.map(
         (variant) =>
@@ -304,8 +408,9 @@ export async function POST(
       );
 
     if (
-      new Set(requestSkus)
-        .size !==
+      new Set(
+        requestSkus
+      ).size !==
       requestSkus.length
     ) {
       return NextResponse.json(
@@ -321,32 +426,40 @@ export async function POST(
     }
 
     /*
-     * SKU must also be unique
-     * in database.
+     * -------------------------
+     * DATABASE SKU CHECK
+     * -------------------------
      */
-    const existingSku =
-      await prisma.productVariant.findFirst({
-        where: {
-          sku: {
-            in:
-              normalizedVariants.map(
-                (variant) =>
-                  variant.sku
-              ),
-          },
-        },
 
-        select: {
-          sku: true,
-        },
-      });
+    const existingSku =
+      await prisma
+        .productVariant
+        .findFirst({
+          where: {
+            sku: {
+              in:
+                normalizedVariants
+                  .map(
+                    (
+                      variant
+                    ) =>
+                      variant.sku
+                  ),
+            },
+          },
+
+          select: {
+            sku: true,
+          },
+        });
 
     if (existingSku) {
       return NextResponse.json(
         {
           success: false,
 
-          message: `SKU ${existingSku.sku} already exists.`,
+          message:
+            `SKU ${existingSku.sku} already exists.`,
         },
         {
           status: 409,
@@ -355,8 +468,11 @@ export async function POST(
     }
 
     /*
-     * Validate Color IDs.
+     * -------------------------
+     * COLOR VALIDATION
+     * -------------------------
      */
+
     const colorIds = [
       ...new Set(
         normalizedVariants
@@ -378,13 +494,15 @@ export async function POST(
       0
     ) {
       const colorCount =
-        await prisma.color.count({
-          where: {
-            id: {
-              in: colorIds,
+        await prisma.color
+          .count({
+            where: {
+              id: {
+                in:
+                  colorIds,
+              },
             },
-          },
-        });
+          });
 
       if (
         colorCount !==
@@ -404,8 +522,11 @@ export async function POST(
     }
 
     /*
-     * Validate Size IDs.
+     * -------------------------
+     * SIZE VALIDATION
+     * -------------------------
      */
+
     const sizeIds = [
       ...new Set(
         normalizedVariants
@@ -427,13 +548,15 @@ export async function POST(
       0
     ) {
       const sizeCount =
-        await prisma.size.count({
-          where: {
-            id: {
-              in: sizeIds,
+        await prisma.size
+          .count({
+            where: {
+              id: {
+                in:
+                  sizeIds,
+              },
             },
-          },
-        });
+          });
 
       if (
         sizeCount !==
@@ -453,11 +576,11 @@ export async function POST(
     }
 
     /*
-     * Prevent duplicate combinations.
-     *
-     * Example:
-     * Red + Small twice.
+     * -------------------------
+     * DUPLICATE COMBINATIONS
+     * -------------------------
      */
+
     const combinationKeys =
       normalizedVariants.map(
         (variant) =>
@@ -488,89 +611,126 @@ export async function POST(
       );
     }
 
+    /*
+     * -------------------------
+     * SLUG
+     * -------------------------
+     */
+
     const slug =
       await getUniqueSlug(
         name
       );
 
     /*
-     * Create everything atomically.
+     * -------------------------
+     * CREATE PRODUCT
+     * -------------------------
      */
+
     const product =
-      await prisma.$transaction(
-        async (tx) => {
-          const newProduct =
-            await tx.product.create({
-              data: {
-                name,
-                slug,
+      await prisma
+        .$transaction(
+          async (tx) => {
+            const newProduct =
+              await tx.product
+                .create({
+                  data: {
+                    name,
+                    slug,
 
-                description:
-                  description ||
-                  null,
+                    description:
+                      description ||
+                      null,
 
-                categoryId,
+                    categoryId,
 
-                isActive,
-              },
-            });
+                    isActive,
+                  },
+                });
 
-          /*
-           * Create primary image.
-           */
-          if (imageUrl) {
-            await tx.productImage.create({
-              data: {
-                productId:
-                  newProduct.id,
+            /*
+             * Cloudinary image
+             * metadata goes in DB.
+             *
+             * Actual file remains
+             * in Cloudinary.
+             */
+            if (
+              imageUrl &&
+              imagePublicId
+            ) {
+              await tx
+                .productImage
+                .create({
+                  data: {
+                    productId:
+                      newProduct
+                        .id,
 
-                url: imageUrl,
+                    url:
+                      imageUrl,
 
-                altText:
-                  name,
+                    publicId:
+                      imagePublicId,
 
-                isPrimary:
-                  true,
+                    altText:
+                      name,
 
-                position: 0,
-              },
-            });
+                    isPrimary:
+                      true,
+
+                    position:
+                      0,
+                  },
+                });
+            }
+
+            /*
+             * Variants
+             */
+            await tx
+              .productVariant
+              .createMany({
+                data:
+                  normalizedVariants
+                    .map(
+                      (
+                        variant
+                      ) => ({
+                        productId:
+                          newProduct
+                            .id,
+
+                        sku:
+                          variant
+                            .sku,
+
+                        price:
+                          variant
+                            .price,
+
+                        stock:
+                          variant
+                            .stock,
+
+                        colorId:
+                          variant
+                            .colorId,
+
+                        sizeId:
+                          variant
+                            .sizeId,
+
+                        isActive:
+                          true,
+                      })
+                    ),
+              });
+
+            return newProduct;
           }
-
-          /*
-           * Create variants.
-           */
-          await tx.productVariant.createMany({
-            data:
-              normalizedVariants.map(
-                (variant) => ({
-                  productId:
-                    newProduct.id,
-
-                  sku:
-                    variant.sku,
-
-                  price:
-                    variant.price,
-
-                  stock:
-                    variant.stock,
-
-                  colorId:
-                    variant.colorId,
-
-                  sizeId:
-                    variant.sizeId,
-
-                  isActive:
-                    true,
-                })
-              ),
-          });
-
-          return newProduct;
-        }
-      );
+        );
 
     return NextResponse.json(
       {

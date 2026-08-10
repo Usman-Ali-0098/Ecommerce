@@ -1,9 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { useState, type FormEvent } from "react";
+import {
+  useRouter,
+} from "next/navigation";
+import {
+  signIn,
+} from "next-auth/react";
+import {
+  useState,
+} from "react";
+
+import type {
+  FormEvent,
+} from "react";
 
 import AuthCard from "@/components/auth/auth-card";
 import AuthLayout from "@/components/auth/auth-layout";
@@ -12,14 +22,24 @@ import Button from "@/components/ui/button";
 import Checkbox from "@/components/ui/checkbox";
 import Input from "@/components/ui/input";
 import PasswordInput from "@/components/ui/password-input";
-import { useAlert } from "@/hooks/use-alert";
+
+import {
+  useAlert,
+} from "@/hooks/use-alert";
+
 import {
   loginSchema,
-  type LoginInput,
+} from "@/lib/validations/auth";
+
+import type {
+  LoginInput,
 } from "@/lib/validations/auth";
 
 type LoginErrors = Partial<
-  Record<keyof LoginInput, string>
+  Record<
+    keyof LoginInput,
+    string
+  >
 >;
 
 const initialForm: LoginInput = {
@@ -28,129 +48,320 @@ const initialForm: LoginInput = {
 };
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { alert, showAlert, closeAlert } = useAlert();
+  const router =
+    useRouter();
 
-  const [form, setForm] =
-    useState<LoginInput>(initialForm);
+  const {
+    alert,
+    showAlert,
+    closeAlert,
+  } = useAlert();
 
-  const [errors, setErrors] =
+  const [
+    form,
+    setForm,
+  ] =
+    useState<LoginInput>(
+      initialForm
+    );
+
+  const [
+    errors,
+    setErrors,
+  ] =
     useState<LoginErrors>({});
 
-  const [rememberMe, setRememberMe] =
+  const [
+    rememberMe,
+    setRememberMe,
+  ] =
     useState(false);
 
-  const [isSubmitting, setIsSubmitting] =
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] =
     useState(false);
 
   function updateField(
-    field: keyof LoginInput,
-    value: string
+    field:
+      keyof LoginInput,
+    value:
+      string
   ) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-
-    if (errors[field]) {
-      setErrors((current) => ({
+    setForm(
+      (current) => ({
         ...current,
-        [field]: undefined,
-      }));
+        [field]: value,
+      })
+    );
+
+    if (
+      errors[field]
+    ) {
+      setErrors(
+        (current) => ({
+          ...current,
+          [field]:
+            undefined,
+        })
+      );
     }
   }
 
   async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    const validationResult =
-      loginSchema.safeParse(form);
+    /*
+     * Validate form first.
+     */
+    const validation =
+      loginSchema.safeParse(
+        form
+      );
 
-    if (!validationResult.success) {
-      const fieldErrors: LoginErrors = {};
+    if (
+      !validation.success
+    ) {
+      const nextErrors:
+        LoginErrors = {};
 
       for (
-        const issue of validationResult.error.issues
+        const issue
+        of validation.error
+          .issues
       ) {
-        const field = issue.path[0];
+        const field =
+          issue.path[0];
 
         if (
-          typeof field === "string" &&
-          !fieldErrors[field as keyof LoginInput]
+          field ===
+            "email" ||
+          field ===
+            "password"
         ) {
-          fieldErrors[field as keyof LoginInput] =
+          nextErrors[
+            field
+          ] =
             issue.message;
         }
       }
 
-      setErrors(fieldErrors);
-
-      showAlert("Please correct the form errors.", {
-        variant: "error",
-      });
+      setErrors(
+        nextErrors
+      );
 
       return;
     }
 
-    setIsSubmitting(true);
-    setErrors({});
+    /*
+     * Use validated strings.
+     */
+    const {
+      email,
+      password,
+    } =
+      validation.data;
 
     try {
-      const validatedData =
-        validationResult.data;
+      setIsSubmitting(
+        true
+      );
 
-      const result = await signIn("credentials", {
-        email: validatedData.email,
-        password: validatedData.password,
-        redirect: false,
-      });
+      /*
+       * STEP 1
+       *
+       * Verify credentials and
+       * determine account role.
+       */
+      const roleResponse =
+        await fetch(
+          "/api/login-role",
+          {
+            method:
+              "POST",
 
-      if (!result || result.error) {
-        showAlert("Invalid email or password.", {
-          variant: "error",
-        });
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                email,
+                password,
+              }),
+          }
+        );
+
+      const roleResult =
+        await roleResponse.json();
+
+      if (
+        !roleResponse.ok
+      ) {
+        showAlert(
+          roleResult.message ??
+            "Invalid email or password.",
+          "error"
+        );
 
         return;
       }
 
-      showAlert("Login successful.", {
-        variant: "success",
-        duration: 1500,
-      });
+      /*
+       * STEP 2
+       *
+       * ADMIN LOGIN
+       *
+       * Admin uses the existing
+       * separate admin_session cookie.
+       */
+      if (
+        roleResult.role ===
+        "ADMIN"
+      ) {
+        const adminResponse =
+          await fetch(
+            "/api/admin/login",
+            {
+              method:
+                "POST",
 
-      window.setTimeout(() => {
-        router.push("/");
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body:
+                JSON.stringify({
+                  email,
+                  password,
+                }),
+            }
+          );
+
+        const adminResult =
+          await adminResponse.json();
+
+        if (
+          !adminResponse.ok
+        ) {
+          showAlert(
+            adminResult.message ??
+              "Unable to login as admin.",
+            "error"
+          );
+
+          return;
+        }
+
+        /*
+         * Admin goes directly
+         * to admin dashboard.
+         */
+        router.replace(
+          "/admin/products"
+        );
+
         router.refresh();
-      }, 700);
-    } catch (error) {
-      console.error("Login error:", error);
+
+        return;
+      }
+
+      /*
+       * STEP 3
+       *
+       * CUSTOMER LOGIN
+       *
+       * Customer continues using
+       * Auth.js Credentials provider.
+       */
+      if (
+        roleResult.role ===
+        "USER"
+      ) {
+        const result =
+          await signIn(
+            "credentials",
+            {
+              email,
+              password,
+              redirect: false,
+            }
+          );
+
+        if (
+          !result ||
+          result.error
+        ) {
+          showAlert(
+            "Invalid email or password.",
+            "error"
+          );
+
+          return;
+        }
+
+        router.replace(
+          "/"
+        );
+
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * Unknown role protection.
+       */
+      showAlert(
+        "This account role is not supported.",
+        "error"
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Login error:",
+        error
+      );
 
       showAlert(
-        "Unable to log in right now. Please try again.",
-        {
-          variant: "error",
-        }
+        "Something went wrong while logging in.",
+        "error"
       );
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(
+        false
+      );
     }
   }
 
   return (
-    <AuthLayout title="Login">
+    <AuthLayout>
       {alert ? (
         <Alert
-          message={alert.message}
-          variant={alert.variant}
-          onClose={closeAlert}
+          message={
+            alert.message
+          }
+          variant={
+            alert.variant
+          }
+          onClose={
+            closeAlert
+          }
         />
       ) : null}
 
       <AuthCard>
         <form
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
           noValidate
           className="space-y-6"
         >
@@ -161,13 +372,22 @@ export default function LoginPage() {
             autoComplete="email"
             label="Enter email address"
             placeholder="Please enter your email"
-            value={form.email}
-            error={errors.email}
-            disabled={isSubmitting}
-            onChange={(event) =>
+            value={
+              form.email
+            }
+            error={
+              errors.email
+            }
+            disabled={
+              isSubmitting
+            }
+            onChange={(
+              event
+            ) =>
               updateField(
                 "email",
-                event.target.value
+                event.target
+                  .value
               )
             }
           />
@@ -178,13 +398,22 @@ export default function LoginPage() {
             autoComplete="current-password"
             label="Password"
             placeholder="Please enter password"
-            value={form.password}
-            error={errors.password}
-            disabled={isSubmitting}
-            onChange={(event) =>
+            value={
+              form.password
+            }
+            error={
+              errors.password
+            }
+            disabled={
+              isSubmitting
+            }
+            onChange={(
+              event
+            ) =>
               updateField(
                 "password",
-                event.target.value
+                event.target
+                  .value
               )
             }
           />
@@ -194,11 +423,18 @@ export default function LoginPage() {
               id="rememberMe"
               name="rememberMe"
               label="Remember me"
-              checked={rememberMe}
-              disabled={isSubmitting}
-              onChange={(event) =>
+              checked={
+                rememberMe
+              }
+              disabled={
+                isSubmitting
+              }
+              onChange={(
+                event
+              ) =>
                 setRememberMe(
-                  event.target.checked
+                  event.target
+                    .checked
                 )
               }
             />
@@ -214,13 +450,16 @@ export default function LoginPage() {
           <Button
             type="submit"
             fullWidth
-            loading={isSubmitting}
+            loading={
+              isSubmitting
+            }
           >
             Login
           </Button>
 
           <p className="text-center text-sm text-[#6c757d]">
-            Don&apos;t have an account?{" "}
+            Don&apos;t have
+            an account?{" "}
             <Link
               href="/signup"
               className="text-[#087ff5] hover:underline"

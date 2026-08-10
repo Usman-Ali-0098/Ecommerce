@@ -10,23 +10,23 @@ import {
   useSearchParams,
 } from "next/navigation";
 
-type CategoryOption = {
-  id: string;
-  name: string;
-  slug: string;
-};
-
-type AdminProductFiltersProps = {
-  categories: CategoryOption[];
+type Props = {
   initialSearch: string;
-  initialCategory: string;
+  initialStatus: string;
 };
 
-export default function AdminProductFilters({
-  categories,
+const statuses = [
+  "PENDING",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "CANCELLED",
+];
+
+export default function AdminOrderFilters({
   initialSearch,
-  initialCategory,
-}: AdminProductFiltersProps) {
+  initialStatus,
+}: Props) {
   const router =
     useRouter();
 
@@ -43,7 +43,7 @@ export default function AdminProductFilters({
   function updateUrl(
     updates: {
       search?: string;
-      category?: string;
+      status?: string;
     }
   ) {
     const params =
@@ -71,19 +71,19 @@ export default function AdminProductFilters({
     }
 
     if (
-      updates.category !==
+      updates.status !==
       undefined
     ) {
       if (
-        updates.category
+        updates.status
       ) {
         params.set(
-          "category",
-          updates.category
+          "status",
+          updates.status
         );
       } else {
         params.delete(
-          "category"
+          "status"
         );
       }
     }
@@ -97,12 +97,12 @@ export default function AdminProductFilters({
 
     router.push(
       query
-        ? `/admin/products?${query}`
-        : "/admin/products"
+        ? `/admin/orders?${query}`
+        : "/admin/orders"
     );
   }
 
-  function handleSearch(
+  function handleSubmit(
     event:
       FormEvent<HTMLFormElement>
   ) {
@@ -117,14 +117,14 @@ export default function AdminProductFilters({
     setSearch("");
 
     router.push(
-      "/admin/products"
+      "/admin/orders"
     );
   }
 
   const hasFilters =
     Boolean(
       initialSearch ||
-      initialCategory
+      initialStatus
     );
 
   return (
@@ -133,7 +133,7 @@ export default function AdminProductFilters({
 
       <form
         onSubmit={
-          handleSearch
+          handleSubmit
         }
         className="flex min-w-0 flex-1 gap-2"
       >
@@ -151,54 +151,56 @@ export default function AdminProductFilters({
                   .value
               )
             }
-            placeholder="Search by product name..."
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            placeholder="Search order, customer or email..."
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
         <button
           type="submit"
-          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 px-4 text-xs font-medium text-white transition hover:bg-blue-700 cursor-pointer"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-blue-500 px-4 text-xs font-medium text-white transition hover:bg-blue-800 cursor-pointer"
         >
           Search
         </button>
       </form>
 
-      {/* Category */}
+      {/* Status */}
 
       <div className="flex items-center gap-2">
-        <div className="relative min-w-[180px] flex-1 lg:flex-none">
+        <div className="relative min-w-[175px] flex-1 lg:flex-none">
           <select
             value={
-              initialCategory
+              initialStatus
             }
             onChange={(
               event
             ) =>
               updateUrl({
-                category:
+                status:
                   event.target
                     .value,
               })
             }
-            className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-9 text-xs text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-9 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
             <option value="">
-              All Categories
+              All Statuses
             </option>
 
-            {categories.map(
-              (category) => (
+            {statuses.map(
+              (status) => (
                 <option
                   key={
-                    category.id
+                    status
                   }
                   value={
-                    category.slug
+                    status
                   }
                 >
                   {
-                    category.name
+                    formatStatus(
+                      status
+                    )
                   }
                 </option>
               )
@@ -222,6 +224,18 @@ export default function AdminProductFilters({
       </div>
     </div>
   );
+}
+
+function formatStatus(
+  status: string
+) {
+  return status
+    .toLowerCase()
+    .replace(
+      /^\w/,
+      (letter) =>
+        letter.toUpperCase()
+    );
 }
 
 function SearchIcon() {

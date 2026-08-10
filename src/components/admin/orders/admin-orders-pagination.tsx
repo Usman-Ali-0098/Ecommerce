@@ -5,22 +5,24 @@ import {
   useSearchParams,
 } from "next/navigation";
 
-type AdminProductsPaginationProps = {
+type Props = {
   page: number;
   totalPages: number;
 };
 
-export default function AdminProductsPagination({
+export default function AdminOrdersPagination({
   page,
   totalPages,
-}: AdminProductsPaginationProps) {
+}: Props) {
   const router =
     useRouter();
 
   const searchParams =
     useSearchParams();
 
-  if (totalPages <= 1) {
+  if (
+    totalPages <= 1
+  ) {
     return null;
   }
 
@@ -42,11 +44,15 @@ export default function AdminProductsPagination({
       );
 
     if (nextPage === 1) {
-      params.delete("page");
+      params.delete(
+        "page"
+      );
     } else {
       params.set(
         "page",
-        String(nextPage)
+        String(
+          nextPage
+        )
       );
     }
 
@@ -55,8 +61,8 @@ export default function AdminProductsPagination({
 
     router.push(
       query
-        ? `/admin/products?${query}`
-        : "/admin/products"
+        ? `/admin/orders?${query}`
+        : "/admin/orders"
     );
   }
 
@@ -75,9 +81,11 @@ export default function AdminProductsPagination({
             page - 1
           )
         }
-        disabled={page === 1}
-        aria-label="Previous page"
+        disabled={
+          page === 1
+        }
         title="Previous page"
+        aria-label="Previous page"
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-35"
       >
         <PreviousIcon />
@@ -144,10 +152,11 @@ export default function AdminProductsPagination({
           )
         }
         disabled={
-          page === totalPages
+          page ===
+          totalPages
         }
-        aria-label="Next page"
         title="Next page"
+        aria-label="Next page"
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-35"
       >
         <NextIcon />
@@ -164,7 +173,9 @@ function getVisiblePages(
   page: number,
   totalPages: number
 ): VisiblePage[] {
-  if (totalPages <= 7) {
+  if (
+    totalPages <= 7
+  ) {
     return Array.from(
       {
         length:

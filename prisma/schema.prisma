@@ -87,6 +87,8 @@ model ProductImage {
   id        String  @id @default(cuid())
   productId String
   url       String
+  publicId  String?
+
   altText   String?
 
   // Why it's used: Sorting and gallery order. Products usually have multiple images (thumbnails, side views, angles). The position field lets you control the exact order in which images appear on the frontend (e.g., 0, 1, 2, 3) so admins can reorder images via drag-and-drop without renaming files or altering database IDs.
@@ -194,6 +196,7 @@ model Order {
   user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   items         OrderItem[]
   notifications Notification[]
+  adminNotifications AdminNotification[]
 
   @@index([userId])
   @@index([status])
@@ -254,6 +257,31 @@ model Notification {
 
   @@index([userId])
   @@index([userId, isRead])
+  @@index([createdAt])
+  @@index([orderId])
+}
+
+
+
+
+enum AdminNotificationType {
+  NEW_ORDER
+  ORDER_CANCELLED
+}
+
+
+model AdminNotification {
+  id        String                @id @default(cuid())
+  orderId   String?
+  type      AdminNotificationType
+  title     String
+  message   String
+  isRead    Boolean               @default(false)
+  createdAt DateTime              @default(now())
+
+  order     Order?                @relation(fields: [orderId],references: [id],onDelete: Cascade)
+
+  @@index([isRead])
   @@index([createdAt])
   @@index([orderId])
 }

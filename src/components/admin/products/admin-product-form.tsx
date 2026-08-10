@@ -3,20 +3,20 @@
 import {
   useMemo,
   useState,
+  type FormEvent,
 } from "react";
 
-import type {
-  FormEvent,
-} from "react";
+import Script from "next/script";
+import { useRouter } from "next/navigation";
 
 import {
   ArrowLeft,
   ImageUp,
+  Loader2,
   Plus,
   Trash2,
+  X,
 } from "lucide-react";
-
-import { useRouter } from "next/navigation";
 
 import Alert from "@/components/ui/alert";
 import Button from "@/components/ui/button";
@@ -41,14 +41,51 @@ type SizeOption = {
   name: string;
 };
 
+type InitialVariant = {
+  id: string;
+  sku: string;
+  price: number;
+  stock: number;
+
+  colorId: string | null;
+  colorName: string | null;
+
+  sizeId: string | null;
+  sizeName: string | null;
+};
+
+type ProductInitialData = {
+  id: string;
+
+  name: string;
+  description: string;
+
+  categoryId: string;
+
+  isActive: boolean;
+
+  imageUrl: string;
+  imagePublicId: string;
+
+  baseSku: string;
+
+  variants: InitialVariant[];
+};
+
 type AdminProductFormProps = {
   categories: CategoryOption[];
   colors: ColorOption[];
   sizes: SizeOption[];
+
+  initialData?: ProductInitialData;
 };
 
 type AddedVariant = {
   id: string;
+
+  existingVariantId?: string;
+
+  sku: string;
 
   colorId: string | null;
   colorName: string | null;
@@ -59,12 +96,91 @@ type AddedVariant = {
   quantity: number;
 };
 
+type CloudinaryUploadInfo = {
+  secure_url?: string;
+  public_id?: string;
+};
+
+type CloudinaryWidgetResult = {
+  event?: string;
+
+  info?:
+    | CloudinaryUploadInfo
+    | string;
+};
+
+type CloudinaryUploadWidget = {
+  open: () => void;
+};
+
+type CloudinarySignatureCallback = (
+  signature: string
+) => void;
+
+type CloudinaryUploadSignature = (
+  callback: CloudinarySignatureCallback,
+  paramsToSign: Record<
+    string,
+    unknown
+  >
+) => void;
+
+type CloudinaryWidgetOptions = {
+  cloudName: string;
+  apiKey: string;
+
+  uploadSignature:
+    CloudinaryUploadSignature;
+
+  sources?: string[];
+
+  multiple?: boolean;
+
+  resourceType?:
+    | "image"
+    | "video"
+    | "raw"
+    | "auto";
+
+  folder?: string;
+
+  clientAllowedFormats?: string[];
+
+  maxFileSize?: number;
+
+  showAdvancedOptions?: boolean;
+
+  cropping?: boolean;
+};
+
+type CloudinaryGlobal = {
+  createUploadWidget: (
+    options:
+      CloudinaryWidgetOptions,
+
+    callback: (
+      error: unknown,
+      result:
+        CloudinaryWidgetResult
+    ) => void
+  ) => CloudinaryUploadWidget;
+};
+
+declare global {
+  interface Window {
+    cloudinary?:
+      CloudinaryGlobal;
+  }
+}
+
 export default function AdminProductForm({
   categories,
   colors,
   sizes,
+  initialData,
 }: AdminProductFormProps) {
-  const router = useRouter();
+  const router =
+    useRouter();
 
   const {
     alert,
@@ -72,52 +188,124 @@ export default function AdminProductForm({
     closeAlert,
   } = useAlert();
 
+  const isEditMode =
+    Boolean(initialData);
+
   /*
-   * Product information
+   * --------------------------------
+   * INITIAL SIMPLE PRODUCT CHECK
+   * --------------------------------
    */
+
+  const initialIsSimple =
+    initialData?.variants.length ===
+      1 &&
+    !initialData.variants[0]
+      ?.colorId &&
+    !initialData.variants[0]
+      ?.sizeId;
+
+  /*
+   * --------------------------------
+   * PRODUCT STATE
+   * --------------------------------
+   */
+
   const [
     name,
     setName,
-  ] = useState("");
+  ] = useState(
+    initialData?.name ?? ""
+  );
 
   const [
     categoryId,
     setCategoryId,
-  ] = useState("");
+  ] = useState(
+    initialData?.categoryId ?? ""
+  );
 
   const [
     price,
     setPrice,
-  ] = useState("");
+  ] = useState(
+    initialData
+      ?.variants[0]
+      ?.price
+      ?.toString() ?? ""
+  );
 
   const [
     quantity,
     setQuantity,
-  ] = useState("");
+  ] = useState(
+    initialIsSimple
+      ? initialData!
+          .variants[0]
+          .stock
+          .toString()
+      : ""
+  );
 
   const [
     baseSku,
     setBaseSku,
-  ] = useState("");
+  ] = useState(
+    initialData?.baseSku ?? ""
+  );
 
   const [
     description,
     setDescription,
-  ] = useState("");
-
-  const [
-    imageUrl,
-    setImageUrl,
-  ] = useState("");
+  ] = useState(
+    initialData?.description ?? ""
+  );
 
   const [
     isActive,
     setIsActive,
-  ] = useState(true);
+  ] = useState(
+    initialData?.isActive ??
+      true
+  );
 
   /*
-   * Variant builder
+   * --------------------------------
+   * IMAGE STATE
+   * --------------------------------
    */
+
+  const [
+    imageUrl,
+    setImageUrl,
+  ] = useState(
+    initialData?.imageUrl ?? ""
+  );
+
+  const [
+    imagePublicId,
+    setImagePublicId,
+  ] = useState(
+    initialData?.imagePublicId ??
+      ""
+  );
+
+  const [
+    isWidgetReady,
+    setIsWidgetReady,
+  ] = useState(false);
+
+  const [
+    isUploading,
+    setIsUploading,
+  ] = useState(false);
+
+  /*
+   * --------------------------------
+   * VARIANT BUILDER STATE
+   * --------------------------------
+   */
+
   const [
     selectedColorId,
     setSelectedColorId,
@@ -138,7 +326,47 @@ export default function AdminProductForm({
     setVariants,
   ] = useState<
     AddedVariant[]
-  >([]);
+  >(() => {
+    if (
+      !initialData ||
+      initialData.variants
+        .length === 0
+    ) {
+      return [];
+    }
+
+    if (initialIsSimple) {
+      return [];
+    }
+
+    return initialData.variants.map(
+      (variant) => ({
+        id:
+          crypto.randomUUID(),
+
+        existingVariantId:
+          variant.id,
+
+        sku:
+          variant.sku,
+
+        colorId:
+          variant.colorId,
+
+        colorName:
+          variant.colorName,
+
+        sizeId:
+          variant.sizeId,
+
+        sizeName:
+          variant.sizeName,
+
+        quantity:
+          variant.stock,
+      })
+    );
+  });
 
   const [
     isSubmitting,
@@ -146,10 +374,11 @@ export default function AdminProductForm({
   ] = useState(false);
 
   /*
-   * If variants exist,
-   * total stock is calculated
-   * automatically.
+   * --------------------------------
+   * TOTAL VARIANT STOCK
+   * --------------------------------
    */
+
   const totalVariantQuantity =
     useMemo(() => {
       return variants.reduce(
@@ -164,9 +393,11 @@ export default function AdminProductForm({
     }, [variants]);
 
   /*
-   * Convert names into
-   * SKU-safe values.
+   * --------------------------------
+   * SKU HELPER
+   * --------------------------------
    */
+
   function skuPart(
     value: string
   ) {
@@ -183,6 +414,227 @@ export default function AdminProductForm({
       );
   }
 
+  /*
+   * --------------------------------
+   * CLOUDINARY
+   * --------------------------------
+   */
+
+  function openUploadWidget() {
+    const cloudName =
+      process.env
+        .NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+
+    const apiKey =
+      process.env
+        .NEXT_PUBLIC_CLOUDINARY_API_KEY;
+
+    if (
+      !cloudName ||
+      !apiKey
+    ) {
+      showAlert(
+        "Cloudinary configuration is missing.",
+        "error"
+      );
+
+      return;
+    }
+
+    if (
+      !window.cloudinary
+    ) {
+      showAlert(
+        "Image uploader is still loading.",
+        "warning"
+      );
+
+      return;
+    }
+
+    const widget =
+      window.cloudinary
+        .createUploadWidget(
+          {
+            cloudName,
+            apiKey,
+
+            uploadSignature: (
+              callback,
+              paramsToSign
+            ) => {
+              void (async () => {
+                try {
+                  const response =
+                    await fetch(
+                      "/api/admin/cloudinary-signature",
+                      {
+                        method:
+                          "POST",
+
+                        headers: {
+                          "Content-Type":
+                            "application/json",
+                        },
+
+                        body:
+                          JSON.stringify({
+                            paramsToSign,
+                          }),
+                      }
+                    );
+
+                  const result =
+                    await response.json();
+
+                  if (
+                    !response.ok
+                  ) {
+                    throw new Error(
+                      result.message ??
+                        "Unable to authorize upload."
+                    );
+                  }
+
+                  callback(
+                    result.signature
+                  );
+                } catch (
+                  error
+                ) {
+                  console.error(
+                    "Cloudinary signature error:",
+                    error
+                  );
+
+                  setIsUploading(
+                    false
+                  );
+
+                  showAlert(
+                    "Unable to authorize image upload.",
+                    "error"
+                  );
+                }
+              })();
+            },
+
+            folder:
+              "ecommerce/products",
+
+            multiple: false,
+
+            resourceType:
+              "image",
+
+            sources: [
+              "local",
+              "url",
+              "camera",
+            ],
+
+            clientAllowedFormats: [
+              "jpg",
+              "jpeg",
+              "png",
+              "webp",
+            ],
+
+            maxFileSize:
+              5_000_000,
+
+            showAdvancedOptions:
+              false,
+
+            cropping: false,
+          },
+
+          (
+            error,
+            result
+          ) => {
+            if (error) {
+              console.error(
+                "Cloudinary widget error:",
+                error
+              );
+
+              setIsUploading(
+                false
+              );
+
+              return;
+            }
+
+            if (
+              result?.event ===
+              "upload-added"
+            ) {
+              setIsUploading(
+                true
+              );
+            }
+
+            if (
+              result?.event ===
+                "success" &&
+              typeof result.info ===
+                "object" &&
+              result.info !== null
+            ) {
+              const {
+                secure_url,
+                public_id,
+              } = result.info;
+
+              if (
+                secure_url &&
+                public_id
+              ) {
+                setImageUrl(
+                  secure_url
+                );
+
+                setImagePublicId(
+                  public_id
+                );
+
+                setIsUploading(
+                  false
+                );
+
+                showAlert(
+                  "Image uploaded successfully.",
+                  "success"
+                );
+              }
+            }
+
+            if (
+              result?.event ===
+              "close"
+            ) {
+              setIsUploading(
+                false
+              );
+            }
+          }
+        );
+
+    widget.open();
+  }
+
+  function clearImage() {
+    setImageUrl("");
+    setImagePublicId("");
+  }
+
+  /*
+   * --------------------------------
+   * ADD VARIANT
+   * --------------------------------
+   */
+
   function addVariant() {
     if (
       !selectedColorId &&
@@ -196,14 +648,13 @@ export default function AdminProductForm({
       return;
     }
 
-    const qty = Number(
-      variantQuantity
-    );
+    const qty =
+      Number(
+        variantQuantity
+      );
 
     if (
-      !Number.isInteger(
-        qty
-      ) ||
+      !Number.isInteger(qty) ||
       qty < 0
     ) {
       showAlert(
@@ -228,10 +679,6 @@ export default function AdminProductForm({
           selectedSizeId
       );
 
-    /*
-     * Prevent duplicate
-     * color-size combinations.
-     */
     const alreadyExists =
       variants.some(
         (variant) =>
@@ -252,6 +699,30 @@ export default function AdminProductForm({
       return;
     }
 
+    const skuParts = [
+      skuPart(
+        baseSku ||
+          name ||
+          "PRODUCT"
+      ),
+    ];
+
+    if (color?.name) {
+      skuParts.push(
+        skuPart(
+          color.name
+        )
+      );
+    }
+
+    if (size?.name) {
+      skuParts.push(
+        skuPart(
+          size.name
+        )
+      );
+    }
+
     setVariants(
       (current) => [
         ...current,
@@ -259,6 +730,11 @@ export default function AdminProductForm({
         {
           id:
             crypto.randomUUID(),
+
+          sku:
+            skuParts.join(
+              "-"
+            ),
 
           colorId:
             color?.id ??
@@ -276,7 +752,8 @@ export default function AdminProductForm({
             size?.name ??
             null,
 
-          quantity: qty,
+          quantity:
+            qty,
         },
       ]
     );
@@ -297,6 +774,12 @@ export default function AdminProductForm({
         )
     );
   }
+
+  /*
+   * --------------------------------
+   * VALIDATION
+   * --------------------------------
+   */
 
   function validateForm() {
     if (!name.trim()) {
@@ -334,22 +817,18 @@ export default function AdminProductForm({
       return false;
     }
 
-    if (!baseSku.trim()) {
-      showAlert(
-        "Product SKU is required.",
-        "warning"
-      );
-
-      return false;
-    }
-
-    /*
-     * Quantity required only
-     * for simple product.
-     */
     if (
       variants.length === 0
     ) {
+      if (!baseSku.trim()) {
+        showAlert(
+          "SKU is required.",
+          "warning"
+        );
+
+        return false;
+      }
+
       const numericQuantity =
         Number(quantity);
 
@@ -368,11 +847,38 @@ export default function AdminProductForm({
       }
     }
 
+    if (
+      variants.length > 0
+    ) {
+      for (
+        const variant
+        of variants
+      ) {
+        if (
+          !variant.sku.trim()
+        ) {
+          showAlert(
+            "Every variant requires an SKU.",
+            "warning"
+          );
+
+          return false;
+        }
+      }
+    }
+
     return true;
   }
 
+  /*
+   * --------------------------------
+   * SUBMIT
+   * --------------------------------
+   */
+
   async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
@@ -380,103 +886,60 @@ export default function AdminProductForm({
       return;
     }
 
-    /*
-     * SIMPLE PRODUCT
-     */
     const productVariants =
       variants.length === 0
         ? [
             {
+              id:
+                initialIsSimple
+                  ? initialData
+                      ?.variants[0]
+                      ?.id
+                  : undefined,
+
               sku:
                 baseSku
                   .trim()
                   .toUpperCase(),
 
               price:
-                Number(
-                  price
-                ),
+                Number(price),
 
               stock:
                 Number(
                   quantity
                 ),
 
-              colorId: null,
-              sizeId: null,
+              colorId:
+                null,
+
+              sizeId:
+                null,
             },
           ]
-
-        /*
-         * VARIABLE PRODUCT
-         */
         : variants.map(
-            (
-              variant,
-              index
-            ) => {
-              const parts = [
-                skuPart(
-                  baseSku
-                ),
-              ];
+            (variant) => ({
+              id:
+                variant
+                  .existingVariantId,
 
-              if (
-                variant.colorName
-              ) {
-                parts.push(
-                  skuPart(
-                    variant.colorName
-                  )
-                );
-              }
+              sku:
+                variant.sku
+                  .trim()
+                  .toUpperCase(),
 
-              if (
-                variant.sizeName
-              ) {
-                parts.push(
-                  skuPart(
-                    variant.sizeName
-                  )
-                );
-              }
+              price:
+                Number(price),
 
-              /*
-               * Fallback guarantees
-               * unique-looking SKU.
-               */
-              if (
-                parts.length ===
-                1
-              ) {
-                parts.push(
-                  String(
-                    index + 1
-                  )
-                );
-              }
+              stock:
+                variant.quantity,
 
-              return {
-                sku:
-                  parts.join(
-                    "-"
-                  ),
+              colorId:
+                variant.colorId,
 
-                price:
-                  Number(
-                    price
-                  ),
-
-                stock:
-                  variant.quantity,
-
-                colorId:
-                  variant.colorId,
-
-                sizeId:
-                  variant.sizeId,
-              };
-            }
+              sizeId:
+                variant.sizeId,
+            })
           );
 
     try {
@@ -484,12 +947,19 @@ export default function AdminProductForm({
         true
       );
 
+      const endpoint =
+        isEditMode
+          ? `/api/admin/products/${initialData!.id}`
+          : "/api/admin/products";
+
       const response =
         await fetch(
-          "/api/admin/products",
+          endpoint,
           {
             method:
-              "POST",
+              isEditMode
+                ? "PUT"
+                : "POST",
 
             headers: {
               "Content-Type":
@@ -507,7 +977,11 @@ export default function AdminProductForm({
                 categoryId,
 
                 imageUrl:
-                  imageUrl.trim() ||
+                  imageUrl ||
+                  null,
+
+                imagePublicId:
+                  imagePublicId ||
                   null,
 
                 isActive,
@@ -524,7 +998,7 @@ export default function AdminProductForm({
       if (!response.ok) {
         showAlert(
           result.message ??
-            "Unable to create product.",
+            "Unable to save product.",
           "error"
         );
 
@@ -538,12 +1012,12 @@ export default function AdminProductForm({
       router.refresh();
     } catch (error) {
       console.error(
-        "Create product error:",
+        "Save product error:",
         error
       );
 
       showAlert(
-        "Something went wrong while creating the product.",
+        "Something went wrong while saving the product.",
         "error"
       );
     } finally {
@@ -553,8 +1027,24 @@ export default function AdminProductForm({
     }
   }
 
+  /*
+   * --------------------------------
+   * UI
+   * --------------------------------
+   */
+
   return (
     <>
+      <Script
+        src="https://upload-widget.cloudinary.com/latest/global/all.js"
+        strategy="afterInteractive"
+        onLoad={() =>
+          setIsWidgetReady(
+            true
+          )
+        }
+      />
+
       <form
         onSubmit={
           handleSubmit
@@ -562,7 +1052,8 @@ export default function AdminProductForm({
         className="mx-auto max-w-6xl"
       >
         {/* Header */}
-        <div className="mb-8">
+
+        <div className="mb-5">
           <button
             type="button"
             onClick={() =>
@@ -570,116 +1061,175 @@ export default function AdminProductForm({
                 "/admin/products"
               )
             }
-            className="flex items-center gap-3 text-left"
+            className="flex items-center gap-2 text-left"
           >
             <ArrowLeft
-              size={24}
+              size={16}
               className="text-blue-600"
             />
 
-            <span className="text-3xl font-semibold tracking-tight text-[#08265a]">
-              Add a Single Product
+            <span className="text-xl font-semibold tracking-tight text-gray-900">
+              {isEditMode
+                ? "Edit Product"
+                : "Add a Single Product"}
             </span>
           </button>
 
-          <div className="mt-8 border-b border-gray-300" />
+          <div className="mt-5 border-b border-gray-200" />
         </div>
 
-        <div className="grid gap-10 lg:grid-cols-[290px_1fr]">
-          {/* LEFT - IMAGE */}
+        <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+          {/* Image */}
+
           <div>
-            <div className="rounded-lg border-2 border-dashed border-gray-300 p-5">
-              <div className="flex min-h-[230px] flex-col items-center justify-center">
+            <div className="overflow-hidden rounded-xl border border-dashed border-gray-300 bg-white p-4">
+              <div className="flex min-h-[250px] flex-col items-center justify-center">
                 {imageUrl ? (
-                  <div className="mb-5 flex h-28 w-full items-center justify-center overflow-hidden rounded-lg bg-gray-50">
-                    <img
-                      src={
-                        imageUrl
+                  <>
+                    <div className="relative mb-4 h-44 w-full overflow-hidden rounded-lg bg-gray-50">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={
+                          imageUrl
+                        }
+                        alt={
+                          name ||
+                          "Product"
+                        }
+                        className="h-full w-full object-contain"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={
+                          clearImage
+                        }
+                        title="Remove image"
+                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm transition hover:bg-gray-100"
+                      >
+                        <X
+                          size={15}
+                        />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={
+                        openUploadWidget
                       }
-                      alt="Product preview"
-                      className="h-full w-full object-contain"
-                      onError={(
-                        event
-                      ) => {
-                        event.currentTarget.style.display =
-                          "none";
-                      }}
-                    />
-                  </div>
+                      disabled={
+                        isUploading
+                      }
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2
+                            size={15}
+                            className="animate-spin"
+                          />
+
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <ImageUp
+                            size={15}
+                          />
+
+                          Change Image
+                        </>
+                      )}
+                    </button>
+                  </>
                 ) : (
-                  <div className="mb-7 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100">
-                    <ImageUp
-                      size={38}
-                      className="text-blue-600"
-                    />
-                  </div>
+                  <>
+                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+                      {isUploading ? (
+                        <Loader2
+                          size={27}
+                          className="animate-spin text-blue-600"
+                        />
+                      ) : (
+                        <ImageUp
+                          size={27}
+                          className="text-blue-600"
+                        />
+                      )}
+                    </div>
+
+                    <p className="text-sm font-medium text-gray-800">
+                      Product Image
+                    </p>
+
+                    <p className="mt-1 text-center text-[11px] leading-4 text-gray-400">
+                      JPG, PNG or WEBP
+                      <br />
+                      Maximum 5 MB
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={
+                        openUploadWidget
+                      }
+                      disabled={
+                        !isWidgetReady ||
+                        isUploading
+                      }
+                      className="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {isUploading ? (
+                        <Loader2
+                          size={15}
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <ImageUp
+                          size={15}
+                        />
+                      )}
+
+                      {isUploading
+                        ? "Uploading..."
+                        : isWidgetReady
+                          ? "Upload Image"
+                          : "Loading Uploader..."}
+                    </button>
+                  </>
                 )}
-
-                <label className="mb-2 w-full text-sm font-medium text-gray-700">
-                  Image URL / Path
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    imageUrl
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setImageUrl(
-                      event
-                        .target
-                        .value
-                    )
-                  }
-                  placeholder="/products/shirt.jpg"
-                  className="mb-4 h-11 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-
-                <div className="flex h-12 w-full items-center justify-center rounded-lg bg-blue-600 text-base font-medium text-white">
-                  Upload
-                </div>
               </div>
             </div>
-
-            <p className="mt-3 text-xs leading-5 text-gray-400">
-              Actual file upload will
-              be connected separately.
-              Currently use an image
-              URL or a path from your
-              public folder.
-            </p>
           </div>
 
-          {/* RIGHT */}
-          <div className="space-y-6">
-            {/* Product name */}
+          {/* Form Fields */}
+
+          <div className="min-w-0 space-y-4">
+            {/* Product Name */}
+
             <div>
-              <label className="mb-2 block text-lg font-medium text-gray-800">
+              <label className="mb-1.5 block text-xs font-medium text-gray-700">
                 Product Name
               </label>
 
               <textarea
                 value={name}
-                onChange={(
-                  event
-                ) =>
+                onChange={(event) =>
                   setName(
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 rows={2}
-                placeholder="Cargo Trousers for Men - 6 Pocket Trousers"
-                className="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 text-base outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                placeholder="Enter product name"
+                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
 
             {/* Category */}
+
             <div>
-              <label className="mb-2 block text-lg font-medium text-gray-800">
+              <label className="mb-1.5 block text-xs font-medium text-gray-700">
                 Category
               </label>
 
@@ -691,12 +1241,10 @@ export default function AdminProductForm({
                   event
                 ) =>
                   setCategoryId(
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
-                className="h-14 w-full rounded-lg border border-gray-300 bg-white px-4 text-base text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="">
                   Select Category
@@ -726,36 +1274,39 @@ export default function AdminProductForm({
               </select>
             </div>
 
-            {/* Price + Quantity */}
-            <div className="grid gap-6 md:grid-cols-2">
+            {/* Price / Quantity */}
+
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-lg font-medium text-gray-800">
+                <label className="mb-1.5 block text-xs font-medium text-gray-700">
                   Price
                 </label>
 
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={
-                    price
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setPrice(
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                    Rs.
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={price}
+                    onChange={(
                       event
-                        .target
-                        .value
-                    )
-                  }
-                  placeholder="00.00"
-                  className="h-14 w-full rounded-lg border border-gray-300 px-4 text-base outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
+                    ) =>
+                      setPrice(
+                        event.target.value
+                      )
+                    }
+                    placeholder="0.00"
+                    className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-lg font-medium text-gray-800">
+                <label className="mb-1.5 block text-xs font-medium text-gray-700">
                   Quantity
                 </label>
 
@@ -773,263 +1324,462 @@ export default function AdminProductForm({
                     event
                   ) =>
                     setQuantity(
-                      event
-                        .target
-                        .value
+                      event.target.value
                     )
                   }
                   readOnly={
                     variants.length >
                     0
                   }
-                  placeholder="100"
-                  className={`h-14 w-full rounded-lg border border-gray-300 px-4 text-base outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                  placeholder="0"
+                  className={`h-10 w-full rounded-lg border border-gray-200 px-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ${
                     variants.length >
                     0
-                      ? "bg-gray-50"
+                      ? "cursor-default bg-gray-50"
                       : "bg-white"
                   }`}
                 />
 
                 {variants.length >
                 0 ? (
-                  <p className="mt-1 text-xs text-gray-400">
-                    Total quantity is
-                    calculated from
-                    variants.
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    Calculated
+                    automatically from
+                    variant stock.
                   </p>
                 ) : null}
               </div>
             </div>
 
             {/* SKU */}
+
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                SKU
+              <label className="mb-1.5 block text-xs font-medium text-gray-700">
+                Base SKU
               </label>
 
               <input
-                value={
-                  baseSku
-                }
+                value={baseSku}
                 onChange={(
                   event
                 ) =>
                   setBaseSku(
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 placeholder="PRODUCT-001"
-                className="h-12 w-full rounded-lg border border-gray-300 px-4 text-sm outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
 
-              <p className="mt-1 text-xs text-gray-400">
-                For variable products,
-                color and size will be
-                added automatically to
-                this SKU.
+              <p className="mt-1 text-[10px] text-gray-400">
+                Used as the main SKU
+                for simple products
+                and as the base when
+                generating variant
+                SKUs.
               </p>
             </div>
 
-            {/* VARIANT ADDER */}
-            <div>
-              <label className="mb-2 block text-lg font-medium text-gray-800">
-                Product Variants
-              </label>
+            {/* Variants */}
 
-              <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_58px]">
-                {/* Color */}
-                <select
-                  value={
-                    selectedColorId
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setSelectedColorId(
-                      event
-                        .target
-                        .value
-                    )
-                  }
-                  className="h-14 rounded-lg border border-gray-300 bg-white px-4 text-base text-gray-600 outline-none transition focus:border-blue-500"
-                >
-                  <option value="">
-                    Select Color
-                  </option>
+            <div className="rounded-xl border border-gray-200 bg-white">
+              {/* Variant Header */}
 
-                  {colors.map(
-                    (color) => (
-                      <option
-                        key={
-                          color.id
-                        }
-                        value={
-                          color.id
-                        }
-                      >
-                        {
-                          color.name
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
+              <div className="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Product Variants
+                  </h3>
 
-                {/* Size */}
-                <select
-                  value={
-                    selectedSizeId
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setSelectedSizeId(
-                      event
-                        .target
-                        .value
-                    )
-                  }
-                  className="h-14 rounded-lg border border-gray-300 bg-white px-4 text-base text-gray-600 outline-none transition focus:border-blue-500"
-                >
-                  <option value="">
-                    Select Size
-                  </option>
-
-                  {sizes.map(
-                    (size) => (
-                      <option
-                        key={
-                          size.id
-                        }
-                        value={
-                          size.id
-                        }
-                      >
-                        {
-                          size.name
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
-
-                {/* Qty */}
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={
-                    variantQuantity
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setVariantQuantity(
-                      event
-                        .target
-                        .value
-                    )
-                  }
-                  placeholder="Enter Qty"
-                  className="h-14 rounded-lg border border-gray-300 px-4 text-base outline-none transition focus:border-blue-500"
-                />
-
-                {/* + */}
-                <button
-                  type="button"
-                  onClick={
-                    addVariant
-                  }
-                  className="flex h-14 items-center justify-center rounded-lg border border-gray-300 bg-white text-blue-600 transition hover:border-blue-500 hover:bg-blue-50"
-                  aria-label="Add variant"
-                >
-                  <Plus
-                    size={24}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* ADDED VARIANTS */}
-            {variants.length >
-            0 ? (
-              <div className="overflow-hidden rounded-lg border border-gray-200">
-                <div className="grid grid-cols-[1fr_1fr_120px_55px] bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
-                  <div>
-                    Color
-                  </div>
-
-                  <div>
-                    Size
-                  </div>
-
-                  <div>
-                    Quantity
-                  </div>
-
-                  <div />
+                  <p className="mt-0.5 text-[11px] text-gray-400">
+                    Add color and/or
+                    size combinations
+                    with individual
+                    stock quantities.
+                  </p>
                 </div>
 
-                {variants.map(
-                  (
-                    variant
-                  ) => (
-                    <div
-                      key={
-                        variant.id
-                      }
-                      className="grid grid-cols-[1fr_1fr_120px_55px] items-center border-t border-gray-100 px-4 py-3 text-sm text-gray-700"
-                    >
-                      <div>
-                        {variant.colorName ??
-                          "—"}
-                      </div>
+                {variants.length >
+                0 ? (
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-medium text-blue-600">
+                      {
+                        variants.length
+                      }{" "}
+                      variant
+                      {variants.length ===
+                      1
+                        ? ""
+                        : "s"}
+                    </span>
 
-                      <div>
-                        {variant.sizeName ??
-                          "—"}
-                      </div>
-
-                      <div>
+                    <span className="text-[11px] text-gray-500">
+                      Stock{" "}
+                      <strong className="font-semibold text-gray-800">
                         {
-                          variant.quantity
+                          totalVariantQuantity
                         }
+                      </strong>
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Variant Builder */}
+
+              <div className="p-4">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_130px_42px]">
+                  {/* Color */}
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-gray-500">
+                      Color
+                    </label>
+
+                    <select
+                      value={
+                        selectedColorId
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setSelectedColorId(
+                          event.target.value
+                        )
+                      }
+                      className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="">
+                        Select Color
+                      </option>
+
+                      {colors.map(
+                        (
+                          color
+                        ) => (
+                          <option
+                            key={
+                              color.id
+                            }
+                            value={
+                              color.id
+                            }
+                          >
+                            {
+                              color.name
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Size */}
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-gray-500">
+                      Size
+                    </label>
+
+                    <select
+                      value={
+                        selectedSizeId
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setSelectedSizeId(
+                          event.target.value
+                        )
+                      }
+                      className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="">
+                        Select Size
+                      </option>
+
+                      {sizes.map(
+                        (
+                          size
+                        ) => (
+                          <option
+                            key={
+                              size.id
+                            }
+                            value={
+                              size.id
+                            }
+                          >
+                            {
+                              size.name
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Variant Qty */}
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-gray-500">
+                      Quantity
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={
+                        variantQuantity
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setVariantQuantity(
+                          event.target.value
+                        )
+                      }
+                      placeholder="0"
+                      className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+
+                  {/* Add */}
+
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={
+                        addVariant
+                      }
+                      title="Add variant"
+                      aria-label="Add variant"
+                      className="flex h-10 w-full items-center justify-center rounded-lg bg-blue-600 text-white transition hover:bg-blue-700 sm:w-10"
+                    >
+                      <Plus
+                        size={16}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Empty Variant State */}
+
+                {variants.length ===
+                0 ? (
+                  <div className="mt-4 flex items-center justify-between rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-3 py-2.5">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600">
+                        No variants
+                        added
+                      </p>
+
+                      <p className="mt-0.5 text-[10px] text-gray-400">
+                        Leave this
+                        section empty
+                        for a simple
+                        product.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Variant Table */
+
+                  <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+                    <div className="min-w-[660px]">
+                      <div className="grid grid-cols-[1fr_1fr_1.7fr_90px_42px] bg-gray-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        <div>
+                          Color
+                        </div>
+
+                        <div>
+                          Size
+                        </div>
+
+                        <div>
+                          SKU
+                        </div>
+
+                        <div>
+                          Stock
+                        </div>
+
+                        <div />
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeVariant(
-                            variant.id
-                          )
-                        }
-                        className="flex h-9 w-9 items-center justify-center rounded-md text-red-500 transition hover:bg-red-50"
-                        aria-label="Remove variant"
-                      >
-                        <Trash2
-                          size={
-                            18
-                          }
-                        />
-                      </button>
+                      {variants.map(
+                        (
+                          variant
+                        ) => (
+                          <div
+                            key={
+                              variant.id
+                            }
+                            className="grid grid-cols-[1fr_1fr_1.7fr_90px_42px] items-center border-t border-gray-100 px-3 py-2.5"
+                          >
+                            {/* Color */}
+
+                            <div className="min-w-0 pr-2">
+                              {variant.colorName ? (
+                                <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const selectedColor =
+                                      colors.find(
+                                        (
+                                          color
+                                        ) =>
+                                          color.id ===
+                                          variant.colorId
+                                      );
+
+                                    return selectedColor?.hexacode ? (
+                                      <span
+                                        className="h-3 w-3 shrink-0 rounded-full border border-gray-200"
+                                        style={{
+                                          backgroundColor:
+                                            selectedColor.hexacode,
+                                        }}
+                                      />
+                                    ) : null;
+                                  })()}
+
+                                  <span className="truncate text-xs text-gray-700">
+                                    {
+                                      variant.colorName
+                                    }
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-gray-300">
+                                  —
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Size */}
+
+                            <div className="pr-2">
+                              {variant.sizeName ? (
+                                <span className="inline-flex min-w-7 items-center justify-center rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-700">
+                                  {
+                                    variant.sizeName
+                                  }
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-300">
+                                  —
+                                </span>
+                              )}
+                            </div>
+
+                            {/* SKU */}
+
+                            <div className="pr-2">
+                              <input
+                                value={
+                                  variant.sku
+                                }
+                                onChange={(
+                                  event
+                                ) =>
+                                  setVariants(
+                                    (
+                                      current
+                                    ) =>
+                                      current.map(
+                                        (
+                                          item
+                                        ) =>
+                                          item.id ===
+                                          variant.id
+                                            ? {
+                                                ...item,
+
+                                                sku:
+                                                  event
+                                                    .target
+                                                    .value,
+                                              }
+                                            : item
+                                      )
+                                  )
+                                }
+                                className="h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none transition focus:border-blue-500"
+                              />
+                            </div>
+
+                            {/* Quantity */}
+
+                            <div className="pr-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={
+                                  variant.quantity
+                                }
+                                onChange={(
+                                  event
+                                ) =>
+                                  setVariants(
+                                    (
+                                      current
+                                    ) =>
+                                      current.map(
+                                        (
+                                          item
+                                        ) =>
+                                          item.id ===
+                                          variant.id
+                                            ? {
+                                                ...item,
+
+                                                quantity:
+                                                  Number(
+                                                    event
+                                                      .target
+                                                      .value
+                                                  ),
+                                              }
+                                            : item
+                                      )
+                                  )
+                                }
+                                className="h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none transition focus:border-blue-500"
+                              />
+                            </div>
+
+                            {/* Delete */}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeVariant(
+                                  variant.id
+                                )
+                              }
+                              title="Remove variant"
+                              aria-label="Remove variant"
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2
+                                size={14}
+                              />
+                            </button>
+                          </div>
+                        )
+                      )}
                     </div>
-                  )
+                  </div>
                 )}
               </div>
-            ) : (
-              <p className="-mt-3 text-xs text-gray-400">
-                Optional. Leave this
-                empty for a simple
-                product.
-              </p>
-            )}
+            </div>
 
             {/* Description */}
+
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-xs font-medium text-gray-700">
                 Description
               </label>
 
@@ -1041,53 +1791,70 @@ export default function AdminProductForm({
                   event
                 ) =>
                   setDescription(
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 rows={4}
-                placeholder="Product description..."
-                className="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                placeholder="Write product description..."
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
 
-            {/* Status */}
-            <label className="flex cursor-pointer items-center gap-3">
-              <input
-                type="checkbox"
-                checked={
-                  isActive
-                }
-                onChange={(
-                  event
-                ) =>
-                  setIsActive(
-                    event
-                      .target
-                      .checked
-                  )
-                }
-                className="h-4 w-4"
-              />
+            {/* Product Status */}
 
-              <span className="text-sm font-medium text-gray-700">
-                Active Product
-              </span>
-            </label>
+            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <div>
+                <p className="text-xs font-medium text-gray-800">
+                  Product Status
+                </p>
+
+                <p className="mt-0.5 text-[10px] text-gray-400">
+                  Active products
+                  can be shown to
+                  customers.
+                </p>
+              </div>
+
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={
+                    isActive
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setIsActive(
+                      event.target.checked
+                    )
+                  }
+                  className="peer sr-only"
+                />
+
+                <span className="h-5 w-9 rounded-full bg-gray-200 transition peer-checked:bg-blue-600" />
+
+                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-4" />
+              </label>
+            </div>
 
             {/* Save */}
-            <div className="flex justify-end pt-3">
-              <div className="w-full sm:w-52">
+
+            <div className="flex justify-end border-t border-gray-100 pt-4">
+              <div className="w-full sm:w-44">
                 <Button
                   type="submit"
                   disabled={
-                    isSubmitting
+                    isSubmitting ||
+                    isUploading
                   }
                 >
                   {isSubmitting
-                    ? "Saving..."
-                    : "Save"}
+                    ? isEditMode
+                      ? "Updating..."
+                      : "Saving..."
+                    : isEditMode
+                      ? "Update Product"
+                      : "Save Product"}
                 </Button>
               </div>
             </div>

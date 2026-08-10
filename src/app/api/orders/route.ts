@@ -389,6 +389,29 @@ export async function POST(request: Request) {
             },
           });
 
+
+
+
+
+
+          await tx.adminNotification.create({
+  data: {
+    orderId:
+      newOrder.id,
+
+    type:
+      "NEW_ORDER",
+
+    title:
+      "New Order Placed",
+
+    message: `A customer placed order ${newOrder.orderNumber} for Rs. ${Number(
+      newOrder.total
+    ).toLocaleString("en-PK")}.`,
+  },
+});
+
+
           /*
            * STEP E
            * Remove ONLY the selected items

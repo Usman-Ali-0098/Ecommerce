@@ -20,8 +20,8 @@ export default function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden min-h-[calc(100vh-64px)] w-64 shrink-0 border-r border-gray-200 bg-white lg:block">
-      <nav className="space-y-2 p-4">
+    <aside className="hidden w-56 shrink-0 border-r border-gray-200 bg-white lg:block">
+      <nav className="sticky top-14 space-y-1 p-3">
         {navItems.map((item) => {
           const active =
             pathname === item.href ||
@@ -29,21 +29,24 @@ export default function AdminSidebar() {
               `${item.href}/`
             );
 
-          const Icon = item.icon;
+          const Icon =
+            item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition ${
+              className={`group flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition ${
                 active
-                  ? "bg-blue-50 text-[#087ff5]"
+                  ? "bg-blue-50 text-blue-600"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               }`}
             >
               <Icon />
 
-              {item.label}
+              <span>
+                {item.label}
+              </span>
             </Link>
           );
         })}
@@ -57,17 +60,29 @@ function ProductsIcon() {
     <svg
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
+      className="h-[18px] w-[18px] shrink-0"
       aria-hidden="true"
     >
-      <path d="M4 7h16" />
-      <path d="M6 3h12l1 4H5l1-4Z" />
-      <path d="M5 7v13h14V7" />
-      <path d="M9 11h6" />
+      <path
+        d="M4 7.5L12 3L20 7.5L12 12L4 7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M4 7.5V16.5L12 21L20 16.5V7.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M12 12V21"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -77,17 +92,29 @@ function OrdersIcon() {
     <svg
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
+      className="h-[18px] w-[18px] shrink-0"
       aria-hidden="true"
     >
-      <path d="M6 2h12v20H6z" />
-      <path d="M9 7h6" />
-      <path d="M9 11h6" />
-      <path d="M9 15h4" />
+      <path
+        d="M7 3.75H17C18.24 3.75 19.25 4.76 19.25 6V20L16.75 18.4L14.25 20L11.75 18.4L9.25 20L6.75 18.4L4.75 19.7V6C4.75 4.76 5.76 3.75 7 3.75Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M8 8H16"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M8 12H16"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

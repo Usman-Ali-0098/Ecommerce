@@ -2,12 +2,11 @@ import { redirect } from "next/navigation";
 
 import { getAdminSession } from "@/lib/admin-auth";
 
-import AdminSidebar from "@/components/admin/admin-sidebar";
 import AdminHeader from "@/components/admin/admin-header";
+import AdminSidebar from "@/components/admin/admin-sidebar";
 
 type AdminLayoutProps = {
-  children:
-    React.ReactNode;
+  children: React.ReactNode;
 };
 
 export default async function AdminLayout({
@@ -17,9 +16,7 @@ export default async function AdminLayout({
     await getAdminSession();
 
   if (!admin) {
-    redirect(
-      "/admin/login"
-    );
+    redirect("/login");
   }
 
   return (
@@ -33,11 +30,13 @@ export default async function AdminLayout({
         }}
       />
 
-      <div className="flex">
+      <div className="flex min-h-[calc(100vh-56px)]">
         <AdminSidebar />
 
-        <main className="min-w-0 flex-1 p-6 lg:p-8">
-          {children}
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>
