@@ -114,7 +114,9 @@ export default function AdminProductsTable({
         showAlert(
           result.message ??
             "Unable to delete product.",
-          "error"
+          {
+            variant: "error",
+          }
         );
 
         return;
@@ -127,7 +129,9 @@ export default function AdminProductsTable({
       showAlert(
         result.message ??
           "Product updated successfully.",
-        "success"
+        {
+          variant: "success",
+        }
       );
 
       router.refresh();
@@ -139,7 +143,9 @@ export default function AdminProductsTable({
 
       showAlert(
         "Something went wrong while deleting the product.",
-        "error"
+        {
+          variant: "error",
+        }
       );
     } finally {
       setIsDeleting(false);
@@ -149,7 +155,7 @@ export default function AdminProductsTable({
   return (
     <>
       <div className="w-full overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse">
+        <table className="w-full min-w-225 border-collapse">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
               <th className="w-10 px-3 py-3" />
@@ -388,7 +394,7 @@ function ProductRows({
             </div>
 
             <div className="min-w-0">
-              <p className="max-w-[260px] truncate text-sm font-medium text-gray-900">
+              <p className="max-w-65 truncate text-sm font-medium text-gray-900">
                 {
                   product.name
                 }
@@ -542,7 +548,7 @@ function VariantsPanel({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[650px]">
+        <table className="w-full min-w-162.5">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/70 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">
               <th className="px-4 py-2.5">
@@ -597,7 +603,8 @@ function VariantsPanel({
                             backgroundColor:
                               variant
                                 .color
-                                .hexacode,
+                                .hexacode ??
+                              undefined,
                           }}
                         />
 
