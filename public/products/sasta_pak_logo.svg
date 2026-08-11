@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <rect width="1200" height="1200" fill="#ffffff"/>
+  <g fill="#111111">
+    <path d="M370 300 C310 300 270 340 270 400 C270 460 310 500 370 500 H470 C500 500 515 515 515 540 C515 565 500 580 470 580 H280 L250 650 H475 C555 650 610 600 610 535 C610 470 560 430 485 430 H380 C355 430 340 415 340 395 C340 375 355 360 380 360 H560 L590 300 Z"/>
+    <path d="M590 390 H760 C855 390 915 450 915 540 C915 625 855 685 760 685 H660 V760 H590 Z M660 455 V620 H750 C805 620 840 590 840 540 C840 490 805 455 750 455 Z"/>
+  </g>
+  <text x="600" y="850" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" letter-spacing="22" fill="#111111">SASTA PAK</text>
+  <line x1="250" y1="910" x2="360" y2="910" stroke="#B6A18D" stroke-width="4"/>
+  <line x1="840" y1="910" x2="950" y2="910" stroke="#B6A18D" stroke-width="4"/>
+  <text x="600" y="930" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="500" letter-spacing="18" fill="#111111">THRIFT STORE</text>
+  <text x="600" y="1000" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="500" letter-spacing="10" fill="#B6A18D">QUALITY • STYLE • VALUE</text>
+</svg>

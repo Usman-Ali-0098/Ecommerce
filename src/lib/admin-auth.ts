@@ -1,12 +1,23 @@
 import crypto from "crypto";
-import { cookies } from "next/headers";
+import {
+  cookies,
+} from "next/headers";
 
-import { prisma } from "@/lib/prisma";
+import {
+  prisma,
+} from "@/lib/prisma";
 
-const ADMIN_COOKIE_NAME = "admin_session";
+const ADMIN_COOKIE_NAME =
+  "admin_session";
 
-const ADMIN_SESSION_MAX_AGE =
-  60 * 60 * 8; // 8 hours
+const ONE_HOUR =
+  60 * 60;
+
+const DEFAULT_ADMIN_SESSION_MAX_AGE =
+  24 * ONE_HOUR;
+
+const REMEMBER_ADMIN_SESSION_MAX_AGE =
+  48 * ONE_HOUR;
 
 type AdminTokenPayload = {
   userId: number;
@@ -27,22 +38,30 @@ function getSecret() {
   return secret;
 }
 
-function sign(value: string) {
+function sign(
+  value: string
+) {
   return crypto
     .createHmac(
       "sha256",
       getSecret()
     )
     .update(value)
-    .digest("base64url");
+    .digest(
+      "base64url"
+    );
 }
 
 function encodePayload(
   payload: AdminTokenPayload
 ) {
   return Buffer.from(
-    JSON.stringify(payload)
-  ).toString("base64url");
+    JSON.stringify(
+      payload
+    )
+  ).toString(
+    "base64url"
+  );
 }
 
 function decodePayload(
@@ -53,31 +72,49 @@ function decodePayload(
       Buffer.from(
         value,
         "base64url"
-      ).toString("utf8")
+      ).toString(
+        "utf8"
+      )
     );
   } catch {
     return null;
   }
 }
 
+function getAdminSessionMaxAge(
+  rememberMe: boolean
+) {
+  return rememberMe
+    ? REMEMBER_ADMIN_SESSION_MAX_AGE
+    : DEFAULT_ADMIN_SESSION_MAX_AGE;
+}
+
 export function createAdminToken(
   userId: number,
-  email: string
+  email: string,
+  maxAgeSeconds: number
 ) {
   const payload: AdminTokenPayload = {
     userId,
     email,
 
     exp:
-      Math.floor(Date.now() / 1000) +
-      ADMIN_SESSION_MAX_AGE,
+      Math.floor(
+        Date.now() /
+          1000
+      ) +
+      maxAgeSeconds,
   };
 
   const encoded =
-    encodePayload(payload);
+    encodePayload(
+      payload
+    );
 
   const signature =
-    sign(encoded);
+    sign(
+      encoded
+    );
 
   return `${encoded}.${signature}`;
 }
@@ -89,7 +126,8 @@ export function verifyAdminToken(
     const [
       encoded,
       providedSignature,
-    ] = token.split(".");
+    ] =
+      token.split(".");
 
     if (
       !encoded ||
@@ -99,7 +137,9 @@ export function verifyAdminToken(
     }
 
     const expectedSignature =
-      sign(encoded);
+      sign(
+        encoded
+      );
 
     const expectedBuffer =
       Buffer.from(
@@ -129,16 +169,19 @@ export function verifyAdminToken(
     }
 
     const payload =
-      decodePayload(encoded);
+      decodePayload(
+        encoded
+      );
 
     if (!payload) {
       return null;
     }
 
     if (
-      payload.exp <
+      payload.exp <=
       Math.floor(
-        Date.now() / 1000
+        Date.now() /
+          1000
       )
     ) {
       return null;
@@ -152,17 +195,27 @@ export function verifyAdminToken(
 
 export async function setAdminSession(
   userId: number,
-  email: string
+  email: string,
+  rememberMe = false
 ) {
   const cookieStore =
     await cookies();
 
-  cookieStore.set(
-    ADMIN_COOKIE_NAME,
+  const maxAge =
+    getAdminSessionMaxAge(
+      rememberMe
+    );
+
+  const token =
     createAdminToken(
       userId,
-      email
-    ),
+      email,
+      maxAge
+    );
+
+  cookieStore.set(
+    ADMIN_COOKIE_NAME,
+    token,
     {
       httpOnly: true,
 
@@ -170,12 +223,13 @@ export async function setAdminSession(
         process.env.NODE_ENV ===
         "production",
 
-      sameSite: "lax",
+      sameSite:
+        "lax",
 
-      path: "/",
+      path:
+        "/",
 
-      maxAge:
-        ADMIN_SESSION_MAX_AGE,
+      maxAge,
     }
   );
 }
@@ -203,25 +257,30 @@ export async function getAdminSession() {
   }
 
   const payload =
-    verifyAdminToken(token);
+    verifyAdminToken(
+      token
+    );
 
   if (!payload) {
     return null;
   }
 
   /*
-   * Re-check database role.
-   *
-   * Important:
-   * even with a valid cookie,
-   * user must STILL be ADMIN.
+   * Even with a valid signed
+   * cookie, verify that this
+   * account is still an ADMIN.
    */
   const admin =
     await prisma.user.findFirst({
       where: {
-        id: payload.userId,
-        email: payload.email,
-        role: "ADMIN",
+        id:
+          payload.userId,
+
+        email:
+          payload.email,
+
+        role:
+          "ADMIN",
       },
 
       select: {

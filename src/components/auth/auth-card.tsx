@@ -1,6 +1,10 @@
-import type { ReactNode } from "react";
+import type {
+  ReactNode,
+} from "react";
 
-import { cn } from "@/lib/utils";
+import {
+  cn,
+} from "@/lib/utils";
 
 type AuthCardProps = {
   children: ReactNode;
@@ -14,8 +18,7 @@ export default function AuthCard({
   return (
     <section
       className={cn(
-        "w-full rounded-md border border-[#dee2e6] bg-white",
-        "px-6 py-8 sm:px-8 sm:py-10",
+        "w-full rounded-lg border border-gray-200 bg-white px-5 py-8 shadow-sm sm:px-6 sm:py-7",
         className
       )}
     >

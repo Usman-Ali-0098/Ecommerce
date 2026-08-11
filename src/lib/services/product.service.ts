@@ -1,10 +1,16 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type {
+  Prisma,
+} from "@/generated/prisma/client";
 
-import { prisma } from "@/lib/prisma";
+import {
+  prisma,
+} from "@/lib/prisma";
 
 export type ProductSort =
   | "newest"
-  | "name";
+  | "oldest"
+  | "price-low"
+  | "price-high";
 
 type GetPublicProductsParams = {
   category?: string;
@@ -19,7 +25,8 @@ const publicProductInclude = {
 
   images: {
     orderBy: {
-      position: "asc",
+      position:
+        "asc",
     },
   },
 
@@ -29,7 +36,8 @@ const publicProductInclude = {
     },
 
     orderBy: {
-      createdAt: "asc",
+      createdAt:
+        "asc",
     },
 
     include: {
@@ -41,7 +49,8 @@ const publicProductInclude = {
 
 type ProductWithRelations =
   Prisma.ProductGetPayload<{
-    include: typeof publicProductInclude;
+    include:
+      typeof publicProductInclude;
   }>;
 
 export async function getPublicProducts({
@@ -51,175 +60,357 @@ export async function getPublicProducts({
   page = 1,
   pageSize = 12,
 }: GetPublicProductsParams = {}) {
-  const safePage = Math.max(page, 1);
+  const safePage =
+    Math.max(
+      page,
+      1
+    );
 
-  const safePageSize = Math.min(
-    Math.max(pageSize, 1),
-    100
-  );
+  const safePageSize =
+    Math.min(
+      Math.max(
+        pageSize,
+        1
+      ),
+      100
+    );
 
   const skip =
-    (safePage - 1) * safePageSize;
+    (safePage - 1) *
+    safePageSize;
 
-  const where: Prisma.ProductWhereInput = {
-    isActive: true,
-
-    category: {
+  const where: Prisma.ProductWhereInput =
+    {
       isActive: true,
 
-      ...(category
+      category: {
+        isActive: true,
+
+        ...(category
+          ? {
+              slug:
+                category,
+            }
+          : {}),
+      },
+
+      variants: {
+        some: {
+          isActive: true,
+        },
+      },
+
+      ...(search
         ? {
-            slug: category,
+            OR: [
+              {
+                name: {
+                  contains:
+                    search,
+
+                  mode:
+                    "insensitive",
+                },
+              },
+
+              {
+                description:
+                  {
+                    contains:
+                      search,
+
+                    mode:
+                      "insensitive",
+                  },
+              },
+            ],
           }
         : {}),
-    },
+    };
 
-    variants: {
-      some: {
-        isActive: true,
+  /*
+   * Newest / Oldest can be
+   * sorted directly by Prisma.
+   */
+  if (
+    sort === "newest" ||
+    sort === "oldest"
+  ) {
+    const orderBy: Prisma.ProductOrderByWithRelationInput =
+      {
+        createdAt:
+          sort === "oldest"
+            ? "asc"
+            : "desc",
+      };
+
+    const [
+      products,
+      total,
+    ] =
+      await Promise.all([
+        prisma.product.findMany({
+          where,
+          orderBy,
+          skip,
+
+          take:
+            safePageSize,
+
+          include:
+            publicProductInclude,
+        }),
+
+        prisma.product.count({
+          where,
+        }),
+      ]);
+
+    return {
+      products:
+        products.map(
+          mapPublicProduct
+        ),
+
+      pagination: {
+        page:
+          safePage,
+
+        pageSize:
+          safePageSize,
+
+        total,
+
+        totalPages:
+          Math.ceil(
+            total /
+              safePageSize
+          ),
       },
-    },
+    };
+  }
 
-    ...(search
-      ? {
-          OR: [
-            {
-              name: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
+  /*
+   * Product price lives on
+   * ProductVariant.
+   *
+   * Prisma cannot simply order
+   * Product rows by the minimum
+   * price of a one-to-many
+   * variants relation.
+   *
+   * Therefore for price sorting
+   * we load matching products,
+   * calculate minPrice, sort,
+   * then paginate.
+   */
+  const products =
+    await prisma.product.findMany({
+      where,
 
-            {
-              description: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
-          ],
-        }
-      : {}),
-  };
+      include:
+        publicProductInclude,
+    });
 
-  const orderBy: Prisma.ProductOrderByWithRelationInput =
-    sort === "name"
-      ? {
-          name: "asc",
-        }
-      : {
-          createdAt: "desc",
-        };
+  const mappedProducts =
+    products.map(
+      mapPublicProduct
+    );
 
-  const [products, total] =
-    await Promise.all([
-      prisma.product.findMany({
-        where,
-        orderBy,
-        skip,
-        take: safePageSize,
-        include: publicProductInclude,
-      }),
+  mappedProducts.sort(
+    (a, b) => {
+      if (
+        sort ===
+        "price-low"
+      ) {
+        return (
+          a.minPrice -
+          b.minPrice
+        );
+      }
 
-      prisma.product.count({
-        where,
-      }),
-    ]);
+      return (
+        b.minPrice -
+        a.minPrice
+      );
+    }
+  );
+
+  const total =
+    mappedProducts.length;
+
+  const paginatedProducts =
+    mappedProducts.slice(
+      skip,
+      skip +
+        safePageSize
+    );
 
   return {
-    products: products.map(
-      mapPublicProduct
-    ),
+    products:
+      paginatedProducts,
 
     pagination: {
-      page: safePage,
-      pageSize: safePageSize,
+      page:
+        safePage,
+
+      pageSize:
+        safePageSize,
+
       total,
-      totalPages: Math.ceil(
-        total / safePageSize
-      ),
+
+      totalPages:
+        Math.ceil(
+          total /
+            safePageSize
+        ),
     },
   };
 }
 
 function mapPublicProduct(
-  product: ProductWithRelations
+  product:
+    ProductWithRelations
 ) {
   const primaryImage =
     product.images.find(
-      (image) => image.isPrimary
+      (image) =>
+        image.isPrimary
     ) ??
     product.images[0] ??
     null;
 
   const variants =
-    product.variants.map((variant) => ({
-      id: variant.id,
-      sku: variant.sku,
-      price: Number(variant.price),
-      stock: variant.stock,
+    product.variants.map(
+      (variant) => ({
+        id:
+          variant.id,
 
-      color: variant.color
-        ? {
-            id: variant.color.id,
-            name: variant.color.name,
-            hexacode:
-              variant.color.hexacode,
-          }
-        : null,
+        sku:
+          variant.sku,
 
-      size: variant.size
-        ? {
-            id: variant.size.id,
-            name: variant.size.name,
-            sortOrder:
-              variant.size.sortOrder,
-          }
-        : null,
-    }));
+        price:
+          Number(
+            variant.price
+          ),
 
-  const prices = variants.map(
-    (variant) => variant.price
-  );
+        stock:
+          variant.stock,
+
+        color:
+          variant.color
+            ? {
+                id:
+                  variant
+                    .color
+                    .id,
+
+                name:
+                  variant
+                    .color
+                    .name,
+
+                hexacode:
+                  variant
+                    .color
+                    .hexacode,
+              }
+            : null,
+
+        size:
+          variant.size
+            ? {
+                id:
+                  variant
+                    .size
+                    .id,
+
+                name:
+                  variant
+                    .size
+                    .name,
+
+                sortOrder:
+                  variant
+                    .size
+                    .sortOrder,
+              }
+            : null,
+      })
+    );
+
+  const prices =
+    variants.map(
+      (variant) =>
+        variant.price
+    );
 
   const minPrice =
     prices.length > 0
-      ? Math.min(...prices)
+      ? Math.min(
+          ...prices
+        )
       : 0;
 
   const maxPrice =
     prices.length > 0
-      ? Math.max(...prices)
+      ? Math.max(
+          ...prices
+        )
       : 0;
 
   const totalStock =
     variants.reduce(
-      (total, variant) =>
-        total + variant.stock,
+      (
+        total,
+        variant
+      ) =>
+        total +
+        variant.stock,
       0
     );
 
   return {
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
+    id:
+      product.id,
+
+    name:
+      product.name,
+
+    slug:
+      product.slug,
+
     description:
       product.description,
 
     category: {
-      id: product.category.id,
-      name: product.category.name,
-      slug: product.category.slug,
+      id:
+        product
+          .category.id,
+
+      name:
+        product
+          .category.name,
+
+      slug:
+        product
+          .category.slug,
     },
 
-    image: primaryImage
-      ? {
-          id: primaryImage.id,
-          url: primaryImage.url,
-          altText:
-            primaryImage.altText ??
-            product.name,
-        }
-      : null,
+    image:
+      primaryImage
+        ? {
+            id:
+              primaryImage.id,
+
+            url:
+              primaryImage.url,
+
+            altText:
+              primaryImage.altText ??
+              product.name,
+          }
+        : null,
 
     variants,
 

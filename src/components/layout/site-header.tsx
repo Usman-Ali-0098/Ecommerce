@@ -3,16 +3,33 @@
 import Link from "next/link";
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 
+import Image from "next/image";
+
+import {
+  Bell,
+  ChevronDown,
+  LogIn,
+  LogOut,
+  Menu,
+  Package,
+  ShoppingBag,
+  UserRound,
+  X,
+} from "lucide-react";
+
 import {
   signOut,
   useSession,
 } from "next-auth/react";
+
+import {
+  usePathname,
+} from "next/navigation";
 
 import NotificationDropdown from "@/components/notifications/notification-dropdown";
 
@@ -24,11 +41,102 @@ import {
   NOTIFICATION_UPDATED_EVENT,
 } from "@/lib/notification-events";
 
+const navigation = [
+  {
+    label: "Home",
+    href: "/",
+  },
+  {
+    label: "Products",
+    href: "/products",
+  },
+];
+
+/*
+ * --------------------------------
+ * FETCH CART COUNT
+ * --------------------------------
+ *
+ * Important:
+ * This function only fetches and
+ * returns data.
+ *
+ * It does NOT update React state.
+ */
+
+async function fetchCartCount() {
+  const response =
+    await fetch(
+      "/api/cart/count",
+      {
+        cache:
+          "no-store",
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to load cart count. Status: ${response.status}`
+    );
+  }
+
+  const result =
+    await response.json();
+
+  return (
+    Number(
+      result.count
+    ) || 0
+  );
+}
+
+/*
+ * --------------------------------
+ * FETCH NOTIFICATION COUNT
+ * --------------------------------
+ */
+
+async function fetchNotificationCount() {
+  const response =
+    await fetch(
+      "/api/notifications?limit=1",
+      {
+        cache:
+          "no-store",
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to load notification count. Status: ${response.status}`
+    );
+  }
+
+  const result =
+    await response.json();
+
+  return (
+    Number(
+      result.data
+        ?.unreadCount
+    ) || 0
+  );
+}
+
 export default function SiteHeader() {
   const {
     data: session,
     status,
   } = useSession();
+
+  const pathname =
+    usePathname();
+
+  /*
+   * --------------------------------
+   * DROPDOWN STATE
+   * --------------------------------
+   */
 
   const [
     accountOpen,
@@ -41,6 +149,17 @@ export default function SiteHeader() {
   ] = useState(false);
 
   const [
+    mobileOpen,
+    setMobileOpen,
+  ] = useState(false);
+
+  /*
+   * --------------------------------
+   * COUNTER STATE
+   * --------------------------------
+   */
+
+  const [
     cartCount,
     setCartCount,
   ] = useState(0);
@@ -49,6 +168,12 @@ export default function SiteHeader() {
     unreadNotificationCount,
     setUnreadNotificationCount,
   ] = useState(0);
+
+  /*
+   * --------------------------------
+   * REFS
+   * --------------------------------
+   */
 
   const accountRef =
     useRef<HTMLDivElement | null>(
@@ -60,106 +185,102 @@ export default function SiteHeader() {
       null
     );
 
-  const loadCartCount =
-    useCallback(async () => {
-      if (
-        status !==
-        "authenticated"
-      ) {
-        setCartCount(0);
-        return;
-      }
-
-      try {
-        const response =
-          await fetch(
-            "/api/cart/count",
-            {
-              cache:
-                "no-store",
-            }
-          );
-
-        if (!response.ok) {
-          return;
-        }
-
-        const result =
-          await response.json();
-
-        setCartCount(
-          Number(
-            result.count
-          ) || 0
-        );
-      } catch (error) {
-        console.error(
-          "Load cart count error:",
-          error
-        );
-      }
-    }, [status]);
-
-  const loadNotificationCount =
-    useCallback(async () => {
-      if (
-        status !==
-        "authenticated"
-      ) {
-        setUnreadNotificationCount(
-          0
-        );
-
-        return;
-      }
-
-      try {
-        const response =
-          await fetch(
-            "/api/notifications?limit=1",
-            {
-              cache:
-                "no-store",
-            }
-          );
-
-        if (!response.ok) {
-          console.error(
-            "Notification count API failed:",
-            response.status
-          );
-
-          return;
-        }
-
-        const result =
-          await response.json();
-
-        setUnreadNotificationCount(
-          Number(
-            result.data
-              .unreadCount
-          ) || 0
-        );
-      } catch (error) {
-        console.error(
-          "Load notification count error:",
-          error
-        );
-      }
-    }, [status]);
+  /*
+   * --------------------------------
+   * INITIAL COUNTER LOAD
+   * --------------------------------
+   *
+   * Fetch external data when the
+   * customer becomes authenticated.
+   *
+   * The fetch functions themselves
+   * do not call setState.
+   *
+   * State updates happen after the
+   * async operation resolves.
+   */
 
   useEffect(() => {
-    void loadCartCount();
-    void loadNotificationCount();
-  }, [
-    loadCartCount,
-    loadNotificationCount,
-  ]);
+    if (
+      status !==
+      "authenticated"
+    ) {
+      return;
+    }
+
+    let cancelled =
+      false;
+
+    Promise.all([
+      fetchCartCount(),
+      fetchNotificationCount(),
+    ])
+      .then(
+        ([
+          nextCartCount,
+          nextNotificationCount,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setCartCount(
+            nextCartCount
+          );
+
+          setUnreadNotificationCount(
+            nextNotificationCount
+          );
+        }
+      )
+      .catch(
+        (error) => {
+          console.error(
+            "Load header counters error:",
+            error
+          );
+        }
+      );
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [status]);
+
+  /*
+   * --------------------------------
+   * CART UPDATED EVENT
+   * --------------------------------
+   */
 
   useEffect(() => {
     function handleCartUpdated() {
-      void loadCartCount();
+      if (
+        status !==
+        "authenticated"
+      ) {
+        return;
+      }
+
+      void fetchCartCount()
+        .then(
+          (
+            nextCartCount
+          ) => {
+            setCartCount(
+              nextCartCount
+            );
+          }
+        )
+        .catch(
+          (error) => {
+            console.error(
+              "Load cart count error:",
+              error
+            );
+          }
+        );
     }
 
     window.addEventListener(
@@ -173,11 +294,41 @@ export default function SiteHeader() {
         handleCartUpdated
       );
     };
-  }, [loadCartCount]);
+  }, [status]);
+
+  /*
+   * --------------------------------
+   * NOTIFICATION UPDATED EVENT
+   * --------------------------------
+   */
 
   useEffect(() => {
     function handleNotificationUpdated() {
-      void loadNotificationCount();
+      if (
+        status !==
+        "authenticated"
+      ) {
+        return;
+      }
+
+      void fetchNotificationCount()
+        .then(
+          (
+            nextNotificationCount
+          ) => {
+            setUnreadNotificationCount(
+              nextNotificationCount
+            );
+          }
+        )
+        .catch(
+          (error) => {
+            console.error(
+              "Load notification count error:",
+              error
+            );
+          }
+        );
     }
 
     window.addEventListener(
@@ -191,9 +342,18 @@ export default function SiteHeader() {
         handleNotificationUpdated
       );
     };
-  }, [
-    loadNotificationCount,
-  ]);
+  }, [status]);
+
+  /*
+   * --------------------------------
+   * OUTSIDE CLICK
+   * --------------------------------
+   *
+   * State changes here are triggered
+   * by an external DOM event, so they
+   * are appropriate inside the event
+   * callback.
+   */
 
   useEffect(() => {
     function handleOutsideClick(
@@ -238,9 +398,17 @@ export default function SiteHeader() {
     };
   }, []);
 
+  /*
+   * --------------------------------
+   * USER DISPLAY DATA
+   * --------------------------------
+   *
+   * Our custom NextAuth Session
+   * exposes fullName.
+   */
+
   const fullName =
     session?.user?.fullName ||
-    session?.user?.name ||
     "User";
 
   const initial =
@@ -250,33 +418,101 @@ export default function SiteHeader() {
       .toUpperCase() ||
     "U";
 
+  /*
+   * --------------------------------
+   * ADMIN LOGIN
+   * --------------------------------
+   *
+   * Customer session is cleared
+   * before going to the shared login
+   * page for admin authentication.
+   */
+
+  async function handleAdminLogin() {
+    setAccountOpen(
+      false
+    );
+
+    setNotificationsOpen(
+      false
+    );
+
+    await signOut({
+      redirect:
+        false,
+    });
+
+    window.location.href =
+      "/login";
+  }
+
+  /*
+   * --------------------------------
+   * CUSTOMER LOGOUT
+   * --------------------------------
+   */
+
+  async function handleLogout() {
+    setAccountOpen(
+      false
+    );
+
+    setNotificationsOpen(
+      false
+    );
+
+    await signOut({
+      callbackUrl:
+        "/",
+    });
+  }
+
+  /*
+   * --------------------------------
+   * UI
+   * --------------------------------
+   */
+
   return (
-    <header className="border-b border-gray-200 bg-white">
-      <div className="mx-auto flex h-14 w-full max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Brand */}
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+      {/* Main Header */}
+
+      <div className="mx-auto flex h-14 w-full max-w-350 items-center gap-4 px-4 sm:px-6 lg:px-8">
+        {/* Logo */}
 
         <Link
           href="/"
-          className="flex items-center gap-2.5"
+          className="flex shrink-0 items-center gap-2"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white shadow-sm">
-            E
-          </div>
+         <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
+    <Image
+      src="/products/sasta_pak_logo.svg"
+      alt="Sasta-pak Logo"
+      fill
+      sizes="32px"
+      className="object-contain"
+      priority
+    />
+  </div>
 
-          <div>
+          <div className="hidden sm:block">
             <p className="text-sm font-semibold leading-none tracking-tight text-gray-900">
-              Ecommerce
+              SASTAPAK
             </p>
 
-            <p className="mt-1 text-[10px] font-medium leading-none text-gray-400">
-              Online Store
+            <p className="mt-1 text-[10px] leading-none text-gray-400">
+              Thrift Store
             </p>
           </div>
         </Link>
 
-        {/* Right Side */}
+        
 
-        <div className="flex items-center gap-1">
+      
+
+        {/* Right Actions */}
+
+        <div className="ml-auto flex items-center gap-1">
           {/* Notifications */}
 
           {status ===
@@ -292,7 +528,9 @@ export default function SiteHeader() {
                 aria-label={`Notifications. ${unreadNotificationCount} unread`}
                 onClick={() => {
                   setNotificationsOpen(
-                    (current) =>
+                    (
+                      current
+                    ) =>
                       !current
                   );
 
@@ -302,7 +540,9 @@ export default function SiteHeader() {
                 }}
                 className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-900"
               >
-                <BellIcon />
+                <Bell
+                  size={17}
+                />
 
                 {unreadNotificationCount >
                 0 ? (
@@ -334,10 +574,17 @@ export default function SiteHeader() {
 
           <Link
             href="/cart"
-            aria-label={`Shopping cart with ${cartCount} item(s)`}
+            aria-label={
+              status ===
+              "authenticated"
+                ? `Shopping cart with ${cartCount} item(s)`
+                : "Shopping cart"
+            }
             className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-900"
           >
-            <CartIcon />
+            <ShoppingBag
+              size={17}
+            />
 
             {status ===
               "authenticated" &&
@@ -363,9 +610,15 @@ export default function SiteHeader() {
           "unauthenticated" ? (
             <Link
               href="/login"
-              className="ml-1 inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white transition hover:bg-blue-700"
+              className="ml-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 text-xs font-medium text-white transition hover:bg-blue-700"
             >
-              Sign In
+              <LogIn
+                size={14}
+              />
+
+              <span className="hidden sm:inline">
+                Login
+              </span>
             </Link>
           ) : null}
 
@@ -379,11 +632,15 @@ export default function SiteHeader() {
               }
               className="relative ml-1"
             >
+              {/* Account Trigger */}
+
               <button
                 type="button"
                 onClick={() => {
                   setAccountOpen(
-                    (current) =>
+                    (
+                      current
+                    ) =>
                       !current
                   );
 
@@ -395,42 +652,59 @@ export default function SiteHeader() {
                 aria-expanded={
                   accountOpen
                 }
+                aria-label="Open account menu"
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[11px] font-semibold text-white">
                   {initial}
                 </span>
 
-                <span className="hidden max-w-[130px] truncate text-xs font-medium text-gray-700 sm:block">
+                <span className="hidden max-w-32.5 truncate text-xs font-medium text-gray-700 sm:block">
                   {fullName}
                 </span>
 
-                <ChevronDownIcon
-                  open={
+                <ChevronDown
+                  size={13}
+                  className={`hidden text-gray-400 transition-transform sm:block ${
                     accountOpen
-                  }
+                      ? "rotate-180"
+                      : ""
+                  }`}
                 />
               </button>
 
+              {/* Account Dropdown */}
+
               {accountOpen ? (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl shadow-gray-200/50">
+                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl shadow-gray-200/60">
                   {/* User Info */}
 
                   <div className="border-b border-gray-100 px-3.5 py-3">
-                    <p className="truncate text-xs font-semibold text-gray-800">
-                      {fullName}
-                    </p>
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">
+                        {initial}
+                      </span>
 
-                    <p className="mt-0.5 truncate text-[10px] text-gray-400">
-                      {
-                        session?.user
-                          ?.email
-                      }
-                    </p>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-gray-800">
+                          {fullName}
+                        </p>
+
+                        <p className="mt-0.5 truncate text-[10px] text-gray-400">
+                          {
+                            session
+                              ?.user
+                              ?.email
+                          }
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Menu */}
+                  {/* Dropdown Links */}
 
                   <div className="p-1.5">
+                    {/* My Orders */}
+
                     <Link
                       href="/orders"
                       onClick={() =>
@@ -440,35 +714,156 @@ export default function SiteHeader() {
                       }
                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
                     >
-                      <OrdersIcon />
+                      <Package
+                        size={14}
+                      />
 
                       My Orders
                     </Link>
 
+                    {/* Admin Login */}
+
                     <button
                       type="button"
                       onClick={() =>
-                        signOut({
-                          callbackUrl:
-                            "/",
-                        })
+                        void handleAdminLogin()
+                      }
+                      className="mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-gray-600 transition hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      <UserRound
+                        size={14}
+                      />
+
+                      Admin Login
+                    </button>
+
+                    {/* Logout */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleLogout()
                       }
                       className="mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-50"
                     >
-                      <LogoutIcon />
+                      <LogOut
+                        size={14}
+                      />
 
-                      Sign Out
+                      Logout
                     </button>
                   </div>
                 </div>
               ) : null}
             </div>
           ) : null}
+
+          {/* Mobile Menu Trigger */}
+
+          <button
+            type="button"
+            onClick={() =>
+              setMobileOpen(
+                (
+                  current
+                ) =>
+                  !current
+              )
+            }
+            className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 md:hidden"
+            aria-label={
+              mobileOpen
+                ? "Close navigation"
+                : "Open navigation"
+            }
+            aria-expanded={
+              mobileOpen
+            }
+          >
+            {mobileOpen ? (
+              <X
+                size={18}
+              />
+            ) : (
+              <Menu
+                size={18}
+              />
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile Navigation */}
+
+      {mobileOpen ? (
+        <div className="border-t border-gray-100 bg-white px-4 py-3 md:hidden">
+          <nav className="space-y-1">
+            {navigation.map(
+              (item) => {
+                const active =
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname.startsWith(
+                        item.href
+                      );
+
+                return (
+                  <Link
+                    key={
+                      item.href
+                    }
+                    href={
+                      item.href
+                    }
+                    onClick={() =>
+                      setMobileOpen(
+                        false
+                      )
+                    }
+                    className={`block rounded-lg px-3 py-2.5 text-xs font-medium transition ${
+                      active
+                        ? "bg-blue-50 text-blue-600"
+                        : "text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {
+                      item.label
+                    }
+                  </Link>
+                );
+              }
+            )}
+
+            {status ===
+            "authenticated" ? (
+              <Link
+                href="/orders"
+                onClick={() =>
+                  setMobileOpen(
+                    false
+                  )
+                }
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+              >
+                <Package
+                  size={14}
+                />
+
+                My Orders
+              </Link>
+            ) : null}
+          </nav>
+        </div>
+      ) : null}
     </header>
   );
 }
+
+/*
+ * --------------------------------
+ * COUNT BADGE
+ * --------------------------------
+ */
 
 function CountBadge({
   count,
@@ -476,125 +871,10 @@ function CountBadge({
   count: number;
 }) {
   return (
-    <span className="absolute -right-0.5 -top-0.5 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-white">
+    <span className="absolute -right-0.5 -top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-white">
       {count > 99
         ? "99+"
         : count}
     </span>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-[17px] w-[17px]"
-      aria-hidden="true"
-    >
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-
-      <path d="M10 21h4" />
-    </svg>
-  );
-}
-
-function CartIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-[17px] w-[17px]"
-      aria-hidden="true"
-    >
-      <circle
-        cx="9"
-        cy="20"
-        r="1"
-      />
-
-      <circle
-        cx="19"
-        cy="20"
-        r="1"
-      />
-
-      <path d="M3 4h2l2.4 10.2a2 2 0 0 0 2 1.5h7.8a2 2 0 0 0 2-1.6L21 7H6" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({
-  open,
-}: {
-  open: boolean;
-}) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`hidden h-3.5 w-3.5 text-gray-400 transition-transform duration-200 sm:block ${
-        open
-          ? "rotate-180"
-          : ""
-      }`}
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function OrdersIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-3.5 w-3.5"
-      aria-hidden="true"
-    >
-      <path d="M6 2h12v20H6z" />
-
-      <path d="M9 7h6" />
-
-      <path d="M9 11h6" />
-    </svg>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-3.5 w-3.5"
-      aria-hidden="true"
-    >
-      <path d="M10 17l5-5-5-5" />
-
-      <path d="M15 12H3" />
-
-      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-    </svg>
   );
 }

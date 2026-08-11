@@ -1,6 +1,8 @@
 import Image from "next/image";
 
-import type { CartItemData } from "@/types/cart";
+import type {
+  CartItemData,
+} from "@/types/cart";
 
 type CartItemRowProps = {
   item: CartItemData;
@@ -27,100 +29,127 @@ export default function CartItemRow({
   onDelete,
 }: CartItemRowProps) {
   const busy =
-    isUpdating || isDeleting;
+    isUpdating ||
+    isDeleting;
 
   return (
-    <tr className="border-b border-gray-200 text-sm text-gray-700 last:border-b-0">
+    <tr className="border-b border-gray-100 text-xs text-gray-700 last:border-b-0 hover:bg-gray-50/50">
       <td className="px-4 py-3">
-        <div className="flex min-w-[320px] items-center gap-3">
+        <div className="flex min-w-[280px] items-center gap-3">
           <input
             type="checkbox"
-            checked={selected}
-            onChange={onToggle}
+            checked={
+              selected
+            }
+            onChange={
+              onToggle
+            }
             aria-label={`Select ${item.product.name}`}
-            className="h-4 w-4 shrink-0 cursor-pointer accent-[#087ff5]"
+            className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#087ff5]"
           />
 
-          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
-            {item.product.image ? (
+          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md bg-gray-100">
+            {item.product
+              .image ? (
               <Image
-                src={item.product.image.url}
+                src={
+                  item
+                    .product
+                    .image
+                    .url
+                }
                 alt={
-                  item.product.image.altText ??
-                  item.product.name
+                  item
+                    .product
+                    .image
+                    .altText ??
+                  item
+                    .product
+                    .name
                 }
                 fill
-                sizes="48px"
+                sizes="40px"
                 className="object-cover"
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-[10px] text-gray-400">
+              <div className="flex h-full items-center justify-center text-[9px] text-gray-400">
                 No image
               </div>
             )}
           </div>
 
-          <p className="max-w-[420px] leading-5 text-gray-700">
-            {item.product.name}
+          <p className="max-w-[360px] font-medium leading-5 text-gray-800">
+            {
+              item.product
+                .name
+            }
           </p>
         </div>
       </td>
 
-      <td className="px-4 py-3">
-        {item.variant.color?.name ?? "—"}
+      <td className="px-4 py-3 text-gray-600">
+        {item.variant
+          .color?.name ??
+          "—"}
+      </td>
+
+      <td className="px-4 py-3 text-gray-600">
+        {item.variant
+          .size?.name ??
+          "—"}
       </td>
 
       <td className="px-4 py-3">
-        {item.variant.size?.name ?? "—"}
-      </td>
-
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center">
           <button
             type="button"
-            onClick={onDecrease}
+            onClick={
+              onDecrease
+            }
             disabled={
               busy ||
-              item.quantity <= 1
+              item.quantity <=
+                1
             }
             aria-label="Decrease quantity"
-            className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-lg text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-8 w-8 items-center justify-center rounded-l-md border border-gray-300 text-sm text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             −
           </button>
 
-          <div className="flex h-9 min-w-16 items-center justify-center rounded border border-gray-300 px-3 text-base">
+          <div className="flex h-8 min-w-9 items-center justify-center border-y border-gray-300 px-2 text-xs font-medium">
             {isUpdating
               ? "..."
-              : String(
-                  item.quantity
-                ).padStart(2, "0")}
+              : item.quantity}
           </div>
 
           <button
             type="button"
-            onClick={onIncrease}
+            onClick={
+              onIncrease
+            }
             disabled={
               busy ||
               item.quantity >=
-                item.variant.stock
+                item.variant
+                  .stock
             }
             aria-label="Increase quantity"
-            className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-lg text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-8 w-8 items-center justify-center rounded-r-md border border-gray-300 text-sm text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             +
           </button>
         </div>
       </td>
 
-      <td className="px-4 py-3">
+      <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-700">
         Rs.{" "}
         {item.variant.price.toLocaleString(
           "en-PK"
         )}
       </td>
 
-      <td className="px-4 py-3">
+      <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
         Rs.{" "}
         {item.lineTotal.toLocaleString(
           "en-PK"
@@ -130,13 +159,17 @@ export default function CartItemRow({
       <td className="px-4 py-3 text-center">
         <button
           type="button"
-          onClick={onDelete}
-          disabled={busy}
+          onClick={
+            onDelete
+          }
+          disabled={
+            busy
+          }
           aria-label="Remove item"
-          className="inline-flex h-9 w-9 items-center justify-center rounded text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isDeleting ? (
-            <span className="text-xs">
+            <span className="text-[10px]">
               ...
             </span>
           ) : (
@@ -154,16 +187,20 @@ function TrashIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-5 w-5"
+      className="h-4 w-4"
       aria-hidden="true"
     >
       <path d="M4 7h16" />
+
       <path d="M9 7V4h6v3" />
+
       <path d="M6 7l1 13h10l1-13" />
+
       <path d="M10 11v5" />
+
       <path d="M14 11v5" />
     </svg>
   );

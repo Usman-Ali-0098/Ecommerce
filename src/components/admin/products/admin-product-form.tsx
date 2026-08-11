@@ -193,7 +193,7 @@ export default function AdminProductForm({
 
   /*
    * --------------------------------
-   * INITIAL SIMPLE PRODUCT CHECK
+   * SIMPLE PRODUCT CHECK
    * --------------------------------
    */
 
@@ -224,6 +224,33 @@ export default function AdminProductForm({
   ] = useState(
     initialData?.categoryId ?? ""
   );
+
+  /*
+   * Local copy is important because
+   * newly-created categories can be
+   * added without refreshing page.
+   */
+  const [
+    categoryOptions,
+    setCategoryOptions,
+  ] = useState<CategoryOption[]>(
+    categories
+  );
+
+  const [
+    showNewCategory,
+    setShowNewCategory,
+  ] = useState(false);
+
+  const [
+    newCategoryName,
+    setNewCategoryName,
+  ] = useState("");
+
+  const [
+    isAddingCategory,
+    setIsAddingCategory,
+  ] = useState(false);
 
   const [
     price,
@@ -302,7 +329,7 @@ export default function AdminProductForm({
 
   /*
    * --------------------------------
-   * VARIANT BUILDER STATE
+   * VARIANT STATE
    * --------------------------------
    */
 
@@ -435,7 +462,10 @@ export default function AdminProductForm({
     ) {
       showAlert(
         "Cloudinary configuration is missing.",
-        "error"
+        {
+          variant:
+            "error",
+        }
       );
 
       return;
@@ -446,7 +476,10 @@ export default function AdminProductForm({
     ) {
       showAlert(
         "Image uploader is still loading.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return;
@@ -513,7 +546,10 @@ export default function AdminProductForm({
 
                   showAlert(
                     "Unable to authorize image upload.",
-                    "error"
+                    {
+                      variant:
+                        "error",
+                    }
                   );
                 }
               })();
@@ -522,7 +558,8 @@ export default function AdminProductForm({
             folder:
               "ecommerce/products",
 
-            multiple: false,
+            multiple:
+              false,
 
             resourceType:
               "image",
@@ -546,7 +583,8 @@ export default function AdminProductForm({
             showAdvancedOptions:
               false,
 
-            cropping: false,
+            cropping:
+              false,
           },
 
           (
@@ -605,7 +643,10 @@ export default function AdminProductForm({
 
                 showAlert(
                   "Image uploaded successfully.",
-                  "success"
+                  {
+                    variant:
+                      "success",
+                  }
                 );
               }
             }
@@ -642,7 +683,10 @@ export default function AdminProductForm({
     ) {
       showAlert(
         "Select at least a color or size.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return;
@@ -659,7 +703,10 @@ export default function AdminProductForm({
     ) {
       showAlert(
         "Enter a valid variant quantity.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return;
@@ -693,7 +740,10 @@ export default function AdminProductForm({
     if (alreadyExists) {
       showAlert(
         "This color and size combination already exists.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return;
@@ -770,9 +820,130 @@ export default function AdminProductForm({
       (current) =>
         current.filter(
           (variant) =>
-            variant.id !== id
+            variant.id !==
+            id
         )
     );
+  }
+
+  /*
+   * --------------------------------
+   * ADD CATEGORY
+   * --------------------------------
+   */
+
+  async function addCategory() {
+    const categoryName =
+      newCategoryName.trim();
+
+    if (!categoryName) {
+      showAlert(
+        "Enter a category name.",
+        {
+          variant:
+            "warning",
+        }
+      );
+
+      return;
+    }
+
+    try {
+      setIsAddingCategory(
+        true
+      );
+
+      const response =
+        await fetch(
+          "/api/admin/categories",
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                name:
+                  categoryName,
+              }),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        showAlert(
+          result.message ??
+            "Unable to add category.",
+          {
+            variant:
+              "error",
+          }
+        );
+
+        return;
+      }
+
+      const category =
+        result.data
+          .category as CategoryOption;
+
+      /*
+       * Add newly-created category
+       * to the dropdown immediately.
+       */
+      setCategoryOptions(
+        (current) => [
+          ...current,
+          category,
+        ]
+      );
+
+      /*
+       * Automatically select it.
+       */
+      setCategoryId(
+        category.id
+      );
+
+      setNewCategoryName(
+        ""
+      );
+
+      setShowNewCategory(
+        false
+      );
+
+      showAlert(
+        "Category added successfully.",
+        {
+          variant:
+            "success",
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Add category error:",
+        error
+      );
+
+      showAlert(
+        "Something went wrong while adding the category.",
+        {
+          variant:
+            "error",
+        }
+      );
+    } finally {
+      setIsAddingCategory(
+        false
+      );
+    }
   }
 
   /*
@@ -785,7 +956,10 @@ export default function AdminProductForm({
     if (!name.trim()) {
       showAlert(
         "Product name is required.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return false;
@@ -794,7 +968,10 @@ export default function AdminProductForm({
     if (!categoryId) {
       showAlert(
         "Please select a category.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return false;
@@ -811,7 +988,10 @@ export default function AdminProductForm({
     ) {
       showAlert(
         "Please enter a valid price.",
-        "warning"
+        {
+          variant:
+            "warning",
+        }
       );
 
       return false;
@@ -823,7 +1003,10 @@ export default function AdminProductForm({
       if (!baseSku.trim()) {
         showAlert(
           "SKU is required.",
-          "warning"
+          {
+            variant:
+              "warning",
+          }
         );
 
         return false;
@@ -840,7 +1023,10 @@ export default function AdminProductForm({
       ) {
         showAlert(
           "Please enter a valid quantity.",
-          "warning"
+          {
+            variant:
+              "warning",
+          }
         );
 
         return false;
@@ -859,7 +1045,10 @@ export default function AdminProductForm({
         ) {
           showAlert(
             "Every variant requires an SKU.",
-            "warning"
+            {
+              variant:
+                "warning",
+            }
           );
 
           return false;
@@ -999,7 +1188,10 @@ export default function AdminProductForm({
         showAlert(
           result.message ??
             "Unable to save product.",
-          "error"
+          {
+            variant:
+              "error",
+          }
         );
 
         return;
@@ -1018,7 +1210,10 @@ export default function AdminProductForm({
 
       showAlert(
         "Something went wrong while saving the product.",
-        "error"
+        {
+          variant:
+            "error",
+        }
       );
     } finally {
       setIsSubmitting(
@@ -1088,6 +1283,7 @@ export default function AdminProductForm({
                   <>
                     <div className="relative mb-4 h-44 w-full overflow-hidden rounded-lg bg-gray-50">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
+
                       <img
                         src={
                           imageUrl
@@ -1235,22 +1431,42 @@ export default function AdminProductForm({
 
               <select
                 value={
-                  categoryId
+                  showNewCategory
+                    ? "__new__"
+                    : categoryId
                 }
                 onChange={(
                   event
-                ) =>
+                ) => {
+                  const value =
+                    event.target.value;
+
+                  if (
+                    value ===
+                    "__new__"
+                  ) {
+                    setShowNewCategory(
+                      true
+                    );
+
+                    return;
+                  }
+
+                  setShowNewCategory(
+                    false
+                  );
+
                   setCategoryId(
-                    event.target.value
-                  )
-                }
+                    value
+                  );
+                }}
                 className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="">
                   Select Category
                 </option>
 
-                {categories.map(
+                {categoryOptions.map(
                   (
                     category
                   ) => (
@@ -1265,13 +1481,106 @@ export default function AdminProductForm({
                       {
                         category.name
                       }
+
                       {!category.isActive
                         ? " (Inactive)"
                         : ""}
                     </option>
                   )
                 )}
+
+                <option value="__new__">
+                  + Add New Category
+                </option>
               </select>
+
+              {/* Add New Category */}
+
+              {showNewCategory ? (
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    value={
+                      newCategoryName
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setNewCategoryName(
+                        event.target.value
+                      )
+                    }
+                    onKeyDown={(
+                      event
+                    ) => {
+                      if (
+                        event.key ===
+                        "Enter"
+                      ) {
+                        event.preventDefault();
+
+                        void addCategory();
+                      }
+                    }}
+                    placeholder="Enter category name"
+                    disabled={
+                      isAddingCategory
+                    }
+                    autoFocus
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void addCategory()
+                    }
+                    disabled={
+                      isAddingCategory ||
+                      !newCategoryName.trim()
+                    }
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 sm:w-auto"
+                  >
+                    {isAddingCategory ? (
+                      <>
+                        <Loader2
+                          size={14}
+                          className="animate-spin"
+                        />
+
+                        Adding...
+                      </>
+                    ) : (
+                      <>
+                        <Plus
+                          size={14}
+                        />
+
+                        Add
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewCategory(
+                        false
+                      );
+
+                      setNewCategoryName(
+                        ""
+                      );
+                    }}
+                    disabled={
+                      isAddingCategory
+                    }
+                    className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             {/* Price / Quantity */}
@@ -1571,21 +1880,17 @@ export default function AdminProductForm({
                   <div className="mt-4 flex items-center justify-between rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-3 py-2.5">
                     <div>
                       <p className="text-xs font-medium text-gray-600">
-                        No variants
-                        added
+                        No variants added
                       </p>
 
                       <p className="mt-0.5 text-[10px] text-gray-400">
-                        Leave this
-                        section empty
-                        for a simple
+                        Leave this section
+                        empty for a simple
                         product.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  /* Variant Table */
-
                   <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200">
                     <div className="min-w-[660px]">
                       <div className="grid grid-cols-[1fr_1fr_1.7fr_90px_42px] bg-gray-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
@@ -1809,9 +2114,8 @@ export default function AdminProductForm({
                 </p>
 
                 <p className="mt-0.5 text-[10px] text-gray-400">
-                  Active products
-                  can be shown to
-                  customers.
+                  Active products can be
+                  shown to customers.
                 </p>
               </div>
 
@@ -1843,9 +2147,11 @@ export default function AdminProductForm({
               <div className="w-full sm:w-44">
                 <Button
                   type="submit"
+                  fullWidth
                   disabled={
                     isSubmitting ||
-                    isUploading
+                    isUploading ||
+                    isAddingCategory
                   }
                 >
                   {isSubmitting

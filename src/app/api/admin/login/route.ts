@@ -1,8 +1,16 @@
 import bcrypt from "bcrypt";
-import { NextResponse } from "next/server";
 
-import { prisma } from "@/lib/prisma";
-import { setAdminSession } from "@/lib/admin-auth";
+import {
+  NextResponse,
+} from "next/server";
+
+import {
+  prisma,
+} from "@/lib/prisma";
+
+import {
+  setAdminSession,
+} from "@/lib/admin-auth";
 
 export async function POST(
   request: Request
@@ -25,15 +33,25 @@ export async function POST(
         ? body.password
         : "";
 
-    if (!email || !password) {
+    const rememberMe =
+      body?.rememberMe ===
+      true;
+
+    if (
+      !email ||
+      !password
+    ) {
       return NextResponse.json(
         {
-          success: false,
+          success:
+            false,
+
           message:
             "Email and password are required.",
         },
         {
-          status: 400,
+          status:
+            400,
         }
       );
     }
@@ -54,33 +72,43 @@ export async function POST(
       });
 
     /*
-     * Never allow normal users.
+     * Never allow a normal
+     * customer account here.
      */
     if (
       !admin ||
-      admin.role !== "ADMIN"
+      admin.role !==
+        "ADMIN"
     ) {
       return NextResponse.json(
         {
-          success: false,
+          success:
+            false,
+
           message:
             "Invalid admin credentials.",
         },
         {
-          status: 401,
+          status:
+            401,
         }
       );
     }
 
-    if (!admin.password) {
+    if (
+      !admin.password
+    ) {
       return NextResponse.json(
         {
-          success: false,
+          success:
+            false,
+
           message:
             "Invalid admin credentials.",
         },
         {
-          status: 401,
+          status:
+            401,
         }
       );
     }
@@ -91,33 +119,44 @@ export async function POST(
         admin.password
       );
 
-    if (!passwordMatches) {
+    if (
+      !passwordMatches
+    ) {
       return NextResponse.json(
         {
-          success: false,
+          success:
+            false,
+
           message:
             "Invalid admin credentials.",
         },
         {
-          status: 401,
+          status:
+            401,
         }
       );
     }
 
     await setAdminSession(
       admin.id,
-      admin.email
+      admin.email,
+      rememberMe
     );
 
     return NextResponse.json({
-      success: true,
+      success:
+        true,
 
       message:
         "Admin login successful.",
 
       data: {
-        id: admin.id,
-        email: admin.email,
+        id:
+          admin.id,
+
+        email:
+          admin.email,
+
         fullName:
           admin.fullName,
       },
@@ -130,12 +169,15 @@ export async function POST(
 
     return NextResponse.json(
       {
-        success: false,
+        success:
+          false,
+
         message:
           "Unable to login.",
       },
       {
-        status: 500,
+        status:
+          500,
       }
     );
   }

@@ -26,18 +26,24 @@ export default function PasswordResetEmail({
       <Head />
 
       <Preview>
-        Reset your password. This link expires in one minute.
+        Reset your password. Link expires in 1 minute.
       </Preview>
 
       <Body style={styles.body}>
         <Container style={styles.container}>
+          {/* Header */}
+
           <Section style={styles.header}>
-            <Text style={styles.brand}>AUTHENTICATION APP</Text>
+            <Text style={styles.brand}>
+              SASTAPAK
+            </Text>
           </Section>
+
+          {/* Content */}
 
           <Section style={styles.content}>
             <Heading style={styles.heading}>
-              Reset Your Password
+              Reset Password
             </Heading>
 
             <Text style={styles.text}>
@@ -45,8 +51,7 @@ export default function PasswordResetEmail({
             </Text>
 
             <Text style={styles.text}>
-              We received a request to reset your account password.
-              Click the button below to create a new password.
+              Click the button below to reset your password.
             </Text>
 
             <Section style={styles.buttonWrapper}>
@@ -58,24 +63,18 @@ export default function PasswordResetEmail({
               </Button>
             </Section>
 
-            <Section style={styles.notice}>
-              <Text style={styles.noticeText}>
-                This secure link expires in 1 minute and can only
-                be used once.
-              </Text>
-            </Section>
+            <Text style={styles.notice}>
+              This link expires in 1 minute and can only be used once.
+            </Text>
 
             <Text style={styles.secondaryText}>
-              If you did not request this password reset, you can
-              safely ignore this email. Your current password will
-              remain unchanged.
+              If you did not request this, you can ignore this email.
             </Text>
 
             <Hr style={styles.divider} />
 
             <Text style={styles.fallbackText}>
-              If the button does not work, copy and paste this link
-              into your browser:
+              Button not working? Use this link:
             </Text>
 
             <Link
@@ -86,10 +85,11 @@ export default function PasswordResetEmail({
             </Link>
           </Section>
 
+          {/* Footer */}
+
           <Section style={styles.footer}>
             <Text style={styles.footerText}>
-              This is an automated security email. Never share this
-              reset link with anyone.
+              Automated security email — do not share this link.
             </Text>
           </Section>
         </Container>
@@ -101,126 +101,180 @@ export default function PasswordResetEmail({
 const styles = {
   body: {
     margin: "0",
-    padding: "40px 12px",
-    backgroundColor: "#f8f9fa",
+    padding: "20px 10px",
+    backgroundColor: "#f7f9fb",
+
     fontFamily:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
   },
 
   container: {
     width: "100%",
-    maxWidth: "600px",
+    maxWidth: "460px",
+
     margin: "0 auto",
+
     overflow: "hidden",
+
     backgroundColor: "#ffffff",
-    border: "1px solid #dee2e6",
-    borderRadius: "8px",
+
+    border: "1px solid #e5e7eb",
+    borderRadius: "7px",
   },
 
   header: {
-    padding: "24px 32px",
+    padding: "14px 20px",
+
     backgroundColor: "#087ff5",
-    textAlign: "center" as const,
+
+    textAlign:
+      "center" as const,
   },
 
   brand: {
     margin: "0",
+
     color: "#ffffff",
-    fontSize: "15px",
+
+    fontSize: "11px",
+
     fontWeight: "700",
-    letterSpacing: "1.8px",
+
+    letterSpacing: "1.2px",
   },
 
   content: {
-    padding: "40px 42px 34px",
+    padding: "24px 24px 20px",
   },
 
   heading: {
-    margin: "0 0 28px",
-    color: "#087ff5",
-    fontSize: "30px",
-    fontWeight: "500",
-    lineHeight: "1.3",
-    textAlign: "center" as const,
+    margin: "0 0 18px",
+
+    color: "#111827",
+
+    fontSize: "20px",
+
+    fontWeight: "600",
+
+    lineHeight: "1.25",
+
+    textAlign:
+      "center" as const,
   },
 
   text: {
-    margin: "0 0 18px",
-    color: "#212529",
-    fontSize: "16px",
-    lineHeight: "1.7",
+    margin: "0 0 12px",
+
+    color: "#374151",
+
+    fontSize: "13px",
+
+    lineHeight: "1.55",
   },
 
   buttonWrapper: {
-    padding: "12px 0 28px",
-    textAlign: "center" as const,
+    padding: "6px 0 18px",
+
+    textAlign:
+      "center" as const,
   },
 
   button: {
     display: "inline-block",
-    padding: "14px 30px",
+
+    padding: "10px 20px",
+
     color: "#ffffff",
+
     backgroundColor: "#087ff5",
+
     borderRadius: "5px",
-    fontSize: "16px",
-    fontWeight: "500",
+
+    fontSize: "12px",
+
+    fontWeight: "600",
+
     textDecoration: "none",
   },
 
   notice: {
-    marginBottom: "24px",
-    padding: "14px 18px",
-    backgroundColor: "#cfe2ff",
-    border: "1px solid #b6d4fe",
-    borderRadius: "5px",
-  },
+    margin: "0 0 14px",
 
-  noticeText: {
-    margin: "0",
-    color: "#084298",
-    fontSize: "14px",
-    fontWeight: "500",
-    lineHeight: "1.5",
-    textAlign: "center" as const,
+    padding: "10px 12px",
+
+    color: "#1d4ed8",
+
+    backgroundColor: "#eff6ff",
+
+    border: "1px solid #dbeafe",
+
+    borderRadius: "5px",
+
+    fontSize: "11px",
+
+    lineHeight: "1.45",
+
+    textAlign:
+      "center" as const,
   },
 
   secondaryText: {
-    margin: "0 0 24px",
-    color: "#6c757d",
-    fontSize: "14px",
-    lineHeight: "1.65",
+    margin: "0 0 16px",
+
+    color: "#6b7280",
+
+    fontSize: "11px",
+
+    lineHeight: "1.5",
   },
 
   divider: {
-    margin: "24px 0",
-    borderColor: "#dee2e6",
+    margin: "16px 0",
+
+    borderColor: "#e5e7eb",
   },
 
   fallbackText: {
-    margin: "0 0 8px",
-    color: "#6c757d",
-    fontSize: "13px",
-    lineHeight: "1.5",
+    margin: "0 0 5px",
+
+    color: "#9ca3af",
+
+    fontSize: "10px",
+
+    lineHeight: "1.4",
   },
 
   link: {
     color: "#087ff5",
-    fontSize: "13px",
-    lineHeight: "1.5",
-    wordBreak: "break-all" as const,
+
+    fontSize: "10px",
+
+    lineHeight: "1.4",
+
+    wordBreak:
+      "break-all" as const,
+
+    textDecoration: "none",
   },
 
   footer: {
-    padding: "20px 32px",
-    backgroundColor: "#f8f9fa",
-    borderTop: "1px solid #dee2e6",
+    padding: "12px 18px",
+
+    backgroundColor: "#f9fafb",
+
+    borderTop: "1px solid #e5e7eb",
   },
 
   footerText: {
     margin: "0",
-    color: "#6c757d",
-    fontSize: "12px",
-    lineHeight: "1.5",
-    textAlign: "center" as const,
+
+    color: "#9ca3af",
+
+    fontSize: "9px",
+
+    lineHeight: "1.4",
+
+    textAlign:
+      "center" as const,
   },
 };

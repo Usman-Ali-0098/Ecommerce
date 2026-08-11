@@ -1,8 +1,13 @@
-import type { ReactNode } from "react";
+import type {
+  ReactNode,
+} from "react";
 
 import PageContainer from "@/components/layout/page-container";
 import PageHeading from "@/components/layout/page-heading";
-import { cn } from "@/lib/utils";
+
+import {
+  cn,
+} from "@/lib/utils";
 
 type AuthLayoutProps = {
   title: string;
@@ -22,16 +27,20 @@ export default function AuthLayout({
   return (
     <main
       className={cn(
-        "min-h-screen bg-[#f8f9fa] py-14 sm:py-20",
+        "min-h-screen bg-[#f7f9fb] px-4 py-10 sm:py-14",
         className
       )}
     >
-      <PageContainer size={width}>
+      <PageContainer
+        size={width}
+      >
         <PageHeading
           title={title}
-          description={description}
+          description={
+            description
+          }
           align="center"
-          className="mb-10"
+          className="mb-5"
         />
 
         {children}

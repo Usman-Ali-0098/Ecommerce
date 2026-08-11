@@ -9,14 +9,12 @@ import {
 } from "next-auth/react";
 import {
   useState,
-} from "react";
-
-import type {
-  FormEvent,
+  type FormEvent,
 } from "react";
 
 import AuthCard from "@/components/auth/auth-card";
 import AuthLayout from "@/components/auth/auth-layout";
+
 import Alert from "@/components/ui/alert";
 import Button from "@/components/ui/button";
 import Checkbox from "@/components/ui/checkbox";
@@ -29,10 +27,7 @@ import {
 
 import {
   loginSchema,
-} from "@/lib/validations/auth";
-
-import type {
-  LoginInput,
+  type LoginInput,
 } from "@/lib/validations/auth";
 
 type LoginErrors = Partial<
@@ -60,39 +55,36 @@ export default function LoginPage() {
   const [
     form,
     setForm,
-  ] =
-    useState<LoginInput>(
-      initialForm
-    );
+  ] = useState<LoginInput>(
+    initialForm
+  );
 
   const [
     errors,
     setErrors,
-  ] =
-    useState<LoginErrors>({});
+  ] = useState<LoginErrors>(
+    {}
+  );
 
   const [
     rememberMe,
     setRememberMe,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     isSubmitting,
     setIsSubmitting,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   function updateField(
-    field:
-      keyof LoginInput,
-    value:
-      string
+    field: keyof LoginInput,
+    value: string
   ) {
     setForm(
       (current) => ({
         ...current,
-        [field]: value,
+        [field]:
+          value,
       })
     );
 
@@ -110,14 +102,10 @@ export default function LoginPage() {
   }
 
   async function handleSubmit(
-    event:
-      FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    /*
-     * Validate form first.
-     */
     const validation =
       loginSchema.safeParse(
         form
@@ -154,12 +142,17 @@ export default function LoginPage() {
         nextErrors
       );
 
+      showAlert(
+        "Please correct the form errors.",
+        {
+          variant:
+            "error",
+        }
+      );
+
       return;
     }
 
-    /*
-     * Use validated strings.
-     */
     const {
       email,
       password,
@@ -172,10 +165,9 @@ export default function LoginPage() {
       );
 
       /*
-       * STEP 1
-       *
+       * Step 1:
        * Verify credentials and
-       * determine account role.
+       * identify account role.
        */
       const roleResponse =
         await fetch(
@@ -206,19 +198,18 @@ export default function LoginPage() {
         showAlert(
           roleResult.message ??
             "Invalid email or password.",
-          "error"
+          {
+            variant:
+              "error",
+          }
         );
 
         return;
       }
 
       /*
-       * STEP 2
-       *
-       * ADMIN LOGIN
-       *
-       * Admin uses the existing
-       * separate admin_session cookie.
+       * Step 2:
+       * Admin login.
        */
       if (
         roleResult.role ===
@@ -240,6 +231,7 @@ export default function LoginPage() {
                 JSON.stringify({
                   email,
                   password,
+                  rememberMe,
                 }),
             }
           );
@@ -253,16 +245,15 @@ export default function LoginPage() {
           showAlert(
             adminResult.message ??
               "Unable to login as admin.",
-            "error"
+            {
+              variant:
+                "error",
+            }
           );
 
           return;
         }
 
-        /*
-         * Admin goes directly
-         * to admin dashboard.
-         */
         router.replace(
           "/admin/products"
         );
@@ -273,12 +264,8 @@ export default function LoginPage() {
       }
 
       /*
-       * STEP 3
-       *
-       * CUSTOMER LOGIN
-       *
-       * Customer continues using
-       * Auth.js Credentials provider.
+       * Step 3:
+       * Customer login.
        */
       if (
         roleResult.role ===
@@ -290,7 +277,17 @@ export default function LoginPage() {
             {
               email,
               password,
-              redirect: false,
+
+
+      rememberMe:
+        rememberMe
+          ? "true"
+          : "false",
+
+
+
+              redirect:
+                false,
             }
           );
 
@@ -300,7 +297,10 @@ export default function LoginPage() {
         ) {
           showAlert(
             "Invalid email or password.",
-            "error"
+            {
+              variant:
+                "error",
+            }
           );
 
           return;
@@ -315,16 +315,14 @@ export default function LoginPage() {
         return;
       }
 
-      /*
-       * Unknown role protection.
-       */
       showAlert(
         "This account role is not supported.",
-        "error"
+        {
+          variant:
+            "error",
+        }
       );
-    } catch (
-      error
-    ) {
+    } catch (error) {
       console.error(
         "Login error:",
         error
@@ -332,7 +330,10 @@ export default function LoginPage() {
 
       showAlert(
         "Something went wrong while logging in.",
-        "error"
+        {
+          variant:
+            "error",
+        }
       );
     } finally {
       setIsSubmitting(
@@ -342,7 +343,10 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthLayout>
+    <AuthLayout
+      title="Welcome Back"
+      description="Sign in to continue to your account."
+    >
       {alert ? (
         <Alert
           message={
@@ -363,15 +367,15 @@ export default function LoginPage() {
             handleSubmit
           }
           noValidate
-          className="space-y-6"
+          className="space-y-4"
         >
           <Input
             id="email"
             name="email"
             type="email"
             autoComplete="email"
-            label="Enter email address"
-            placeholder="Please enter your email"
+            label="Email Address"
+            placeholder="Enter your email"
             value={
               form.email
             }
@@ -397,7 +401,7 @@ export default function LoginPage() {
             name="password"
             autoComplete="current-password"
             label="Password"
-            placeholder="Please enter password"
+            placeholder="Enter your password"
             value={
               form.password
             }
@@ -418,34 +422,27 @@ export default function LoginPage() {
             }
           />
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Checkbox
-              id="rememberMe"
-              name="rememberMe"
-              label="Remember me"
-              checked={
-                rememberMe
-              }
-              disabled={
-                isSubmitting
-              }
-              onChange={(
-                event
-              ) =>
-                setRememberMe(
-                  event.target
-                    .checked
-                )
-              }
-            />
+         <div className="flex items-center justify-between gap-3">
+  <Checkbox
+    id="rememberMe"
+    name="rememberMe"
+    label="Remember me"
+    checked={rememberMe}
+    disabled={isSubmitting}
+    onChange={(event) =>
+      setRememberMe(
+        event.target.checked
+      )
+    }
+  />
 
-            <Link
-              href="/forgot-password"
-              className="text-sm text-[#087ff5] hover:underline"
-            >
-              Forgot Password?
-            </Link>
-          </div>
+  <Link
+    href="/forgot-password"
+    className="shrink-0 text-xs font-medium text-[#087ff5] transition hover:text-[#066ed6] hover:underline"
+  >
+    Forgot Password?
+  </Link>
+</div>
 
           <Button
             type="submit"
@@ -453,16 +450,18 @@ export default function LoginPage() {
             loading={
               isSubmitting
             }
+            disabled={
+              isSubmitting
+            }
           >
-            Login
+            Sign In
           </Button>
 
-          <p className="text-center text-sm text-[#6c757d]">
-            Don&apos;t have
-            an account?{" "}
+          <p className="text-center text-xs text-gray-500">
+            Don&apos;t have an account?{" "}
             <Link
               href="/signup"
-              className="text-[#087ff5] hover:underline"
+              className="font-medium text-[#087ff5] transition hover:text-[#066ed6] hover:underline"
             >
               Sign Up
             </Link>

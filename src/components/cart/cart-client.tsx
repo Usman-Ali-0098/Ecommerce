@@ -5,19 +5,31 @@ import {
   useState,
 } from "react";
 
-import { useRouter } from "next/navigation";
+import {
+  useRouter,
+} from "next/navigation";
 
 import Alert from "@/components/ui/alert";
-import { useAlert } from "@/hooks/use-alert";
+
+import {
+  useAlert,
+} from "@/hooks/use-alert";
 
 import CartSummary from "@/components/cart/cart-summary";
 import CartTable from "@/components/cart/cart-table";
 import DeleteCartItemModal from "@/components/cart/delete-cart-item-modal";
 
-import { notifyCartUpdated } from "@/lib/cart-events";
-import { notifyNotificationUpdated } from "@/lib/notification-events";
+import {
+  notifyCartUpdated,
+} from "@/lib/cart-events";
 
-import type { CartData } from "@/types/cart";
+import {
+  notifyNotificationUpdated,
+} from "@/lib/notification-events";
+
+import type {
+  CartData,
+} from "@/types/cart";
 
 type CartClientProps = {
   cart: CartData;
@@ -26,7 +38,8 @@ type CartClientProps = {
 export default function CartClient({
   cart,
 }: CartClientProps) {
-  const router = useRouter();
+  const router =
+    useRouter();
 
   const {
     alert,
@@ -34,35 +47,33 @@ export default function CartClient({
     closeAlert,
   } = useAlert();
 
-  /*
-   * Nothing selected when
-   * cart initially opens.
-   */
   const [
     selectedItemIds,
     setSelectedItemIds,
-  ] = useState<string[]>([]);
+  ] = useState<
+    string[]
+  >([]);
 
   const [
     updatingItemId,
     setUpdatingItemId,
-  ] = useState<string | null>(
-    null
-  );
+  ] = useState<
+    string | null
+  >(null);
 
   const [
     deletingItemId,
     setDeletingItemId,
-  ] = useState<string | null>(
-    null
-  );
+  ] = useState<
+    string | null
+  >(null);
 
   const [
     itemPendingDelete,
     setItemPendingDelete,
-  ] = useState<string | null>(
-    null
-  );
+  ] = useState<
+    string | null
+  >(null);
 
   const [
     isPlacingOrder,
@@ -100,7 +111,8 @@ export default function CartClient({
     );
 
   const allSelected =
-    cart.items.length > 0 &&
+    cart.items.length >
+      0 &&
     selectedItemIds.length ===
       cart.items.length;
 
@@ -116,7 +128,8 @@ export default function CartClient({
         ) {
           return current.filter(
             (id) =>
-              id !== itemId
+              id !==
+              itemId
           );
         }
 
@@ -130,13 +143,17 @@ export default function CartClient({
 
   function toggleAll() {
     if (allSelected) {
-      setSelectedItemIds([]);
+      setSelectedItemIds(
+        []
+      );
+
       return;
     }
 
     setSelectedItemIds(
       cart.items.map(
-        (item) => item.id
+        (item) =>
+          item.id
       )
     );
   }
@@ -145,7 +162,9 @@ export default function CartClient({
     itemId: string,
     quantity: number
   ) {
-    if (quantity < 1) {
+    if (
+      quantity < 1
+    ) {
       return;
     }
 
@@ -166,18 +185,19 @@ export default function CartClient({
                 "application/json",
             },
 
-            body: JSON.stringify(
-              {
+            body:
+              JSON.stringify({
                 quantity,
-              }
-            ),
+              }),
           }
         );
 
       const result =
         await response.json();
 
-      if (!response.ok) {
+      if (
+        !response.ok
+      ) {
         showAlert(
           result.message ??
             "Unable to update quantity.",
@@ -193,10 +213,6 @@ export default function CartClient({
         "success"
       );
 
-      /*
-       * Tell header:
-       * cart quantity changed.
-       */
       notifyCartUpdated();
 
       router.refresh();
@@ -226,7 +242,9 @@ export default function CartClient({
   }
 
   function cancelDelete() {
-    if (deletingItemId) {
+    if (
+      deletingItemId
+    ) {
       return;
     }
 
@@ -236,7 +254,9 @@ export default function CartClient({
   }
 
   async function confirmDelete() {
-    if (!itemPendingDelete) {
+    if (
+      !itemPendingDelete
+    ) {
       return;
     }
 
@@ -260,7 +280,9 @@ export default function CartClient({
       const result =
         await response.json();
 
-      if (!response.ok) {
+      if (
+        !response.ok
+      ) {
         showAlert(
           result.message ??
             "Unable to remove product.",
@@ -274,7 +296,8 @@ export default function CartClient({
         (current) =>
           current.filter(
             (id) =>
-              id !== itemId
+              id !==
+              itemId
           )
       );
 
@@ -288,9 +311,6 @@ export default function CartClient({
         "success"
       );
 
-      /*
-       * Update header badge.
-       */
       notifyCartUpdated();
 
       router.refresh();
@@ -312,84 +332,96 @@ export default function CartClient({
   }
 
   async function placeOrder() {
-  if (selectedItemIds.length === 0) {
-    showAlert(
-      "Please select at least one product.",
-      "warning"
-    );
-
-    return;
-  }
-
-  try {
-    setIsPlacingOrder(true);
-
-    const response = await fetch(
-      "/api/orders",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-          cartItemIds:
-            selectedItemIds,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const result =
-        await response.json();
-
+    if (
+      selectedItemIds.length ===
+      0
+    ) {
       showAlert(
-        result.message ??
-          "Unable to place order.",
-        "error"
+        "Please select at least one product.",
+        "warning"
       );
 
       return;
     }
 
-    const result =
-      await response.json();
+    try {
+      setIsPlacingOrder(
+        true
+      );
 
-    showAlert(
-      result.message ??
-        "Order placed successfully.",
-      "success"
-    );
+      const response =
+        await fetch(
+          "/api/orders",
+          {
+            method:
+              "POST",
 
-    setSelectedItemIds([]);
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-    /*
-     * Order API has:
-     * - removed ordered cart items
-     * - created a new unread notification
-     */
-    notifyCartUpdated();
-    notifyNotificationUpdated();
+            body:
+              JSON.stringify({
+                cartItemIds:
+                  selectedItemIds,
+              }),
+          }
+        );
 
-    router.refresh();
+      if (
+        !response.ok
+      ) {
+        const result =
+          await response.json();
 
-    router.push("/orders");
-  } catch (error) {
-    console.error(
-      "Place order request error:",
-      error
-    );
+        showAlert(
+          result.message ??
+            "Unable to place order.",
+          "error"
+        );
 
-    showAlert(
-      "Something went wrong while placing the order.",
-      "error"
-    );
-  } finally {
-    setIsPlacingOrder(false);
+        return;
+      }
+
+      const result =
+        await response.json();
+
+      showAlert(
+        result.message ??
+          "Order placed successfully.",
+        "success"
+      );
+
+      setSelectedItemIds(
+        []
+      );
+
+      notifyCartUpdated();
+
+      notifyNotificationUpdated();
+
+      router.refresh();
+
+      router.push(
+        "/orders"
+      );
+    } catch (error) {
+      console.error(
+        "Place order request error:",
+        error
+      );
+
+      showAlert(
+        "Something went wrong while placing the order.",
+        "error"
+      );
+    } finally {
+      setIsPlacingOrder(
+        false
+      );
+    }
   }
-}
 
   return (
     <>

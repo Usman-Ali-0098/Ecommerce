@@ -1,74 +1,98 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
+import {
+  redirect,
+} from "next/navigation";
 
-import CartSummary from "@/components/cart/cart-summary";
-import CartTable from "@/components/cart/cart-table";
+import {
+  auth,
+} from "@/auth";
+
+import CartClient from "@/components/cart/cart-client";
 import SiteHeader from "@/components/layout/site-header";
 
-import { getUserCart } from "@/lib/services/cart.service";
-import CartClient from "@/components/cart/cart-client";
+import {
+  getUserCart,
+} from "@/lib/services/cart.service";
 
 export default async function CartPage() {
-  const session = await auth();
+  const session =
+    await auth();
 
   if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const userId = Number(
-    session.user.id
-  );
+  const userId =
+    Number(
+      session.user.id
+    );
 
-  if (!Number.isInteger(userId)) {
+  if (
+    !Number.isInteger(
+      userId
+    )
+  ) {
     redirect("/login");
   }
 
   const cart =
-    await getUserCart(userId);
+    await getUserCart(
+      userId
+    );
 
   return (
     <>
       <SiteHeader />
 
-      <main className="min-h-screen bg-[#f7f9fb] px-4 py-8 sm:px-6 lg:px-10">
+      <main className="min-h-screen bg-[#f7f9fb] px-4 py-6 sm:px-6 lg:px-10">
         <div className="mx-auto w-full max-w-[1500px]">
-          <div className="mb-8 flex items-center gap-3">
+          {/* Heading */}
+
+          <div className="mb-5 flex items-center gap-2.5">
             <Link
               href="/"
               aria-label="Back to products"
-              className="text-xl text-[#087ff5] transition hover:opacity-70"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#087ff5] transition hover:bg-blue-50"
             >
-              ←
+              <span className="text-lg">
+                ←
+              </span>
             </Link>
 
-            <h1 className="text-2xl font-medium text-[#087ff5]">
-              Your Shopping Bag
-            </h1>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
+                Your Shopping Bag
+              </h1>
+
+              <p className="mt-0.5 text-xs text-gray-500">
+                Review your selected items before placing an order.
+              </p>
+            </div>
           </div>
 
-          {cart.items.length === 0 ? (
-            <div className="rounded-md border border-gray-200 bg-white px-6 py-16 text-center">
-              <p className="text-lg font-medium text-gray-800">
+          {cart.items.length ===
+          0 ? (
+            <div className="rounded-lg border border-gray-200 bg-white px-6 py-14 text-center">
+              <p className="text-sm font-semibold text-gray-800">
                 Your shopping bag is empty
               </p>
 
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-1.5 text-xs text-gray-500">
                 Add some products to your cart first.
               </p>
 
               <Link
                 href="/"
-                className="mt-6 inline-flex h-10 items-center rounded-md bg-[#087ff5] px-5 text-sm font-medium text-white hover:bg-[#066ed6]"
+                className="mt-5 inline-flex h-9 items-center rounded-md bg-[#087ff5] px-4 text-xs font-semibold text-white transition hover:bg-[#066ed6]"
               >
                 Continue Shopping
               </Link>
             </div>
           ) : (
-            <>
-              <CartClient cart={cart} />
-            </>
+            <CartClient
+              cart={cart}
+            />
           )}
         </div>
       </main>
