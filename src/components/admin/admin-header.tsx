@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -18,6 +17,8 @@ import {
 import {
   useRouter,
 } from "next/navigation";
+
+import Image from "next/image"
 
 type AdminHeaderProps = {
   admin: {
@@ -49,11 +50,72 @@ type AdminNotification = {
   createdAt: string;
 };
 
+type AdminNotificationsResponse = {
+  success: boolean;
+
+  data: {
+    notifications:
+      AdminNotification[];
+
+    unreadCount:
+      number;
+  };
+};
+
+/*
+ * --------------------------------
+ * FETCH ADMIN NOTIFICATIONS
+ * --------------------------------
+ *
+ * This function only communicates
+ * with the API and returns data.
+ *
+ * It does not update React state.
+ */
+
+async function fetchAdminNotifications() {
+  const response =
+    await fetch(
+      "/api/admin/notifications",
+      {
+        method:
+          "GET",
+
+        cache:
+          "no-store",
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to load admin notifications. Status: ${response.status}`
+    );
+  }
+
+  const result =
+    (await response.json()) as
+      AdminNotificationsResponse;
+
+  if (!result.success) {
+    throw new Error(
+      "Unable to load admin notifications."
+    );
+  }
+
+  return result.data;
+}
+
 export default function AdminHeader({
   admin,
 }: AdminHeaderProps) {
   const router =
     useRouter();
+
+  /*
+   * --------------------------------
+   * STATE
+   * --------------------------------
+   */
 
   const [
     profileOpen,
@@ -99,6 +161,12 @@ export default function AdminHeader({
   ] =
     useState(false);
 
+  /*
+   * --------------------------------
+   * REFS
+   * --------------------------------
+   */
+
   const profileRef =
     useRef<HTMLDivElement | null>(
       null
@@ -108,6 +176,12 @@ export default function AdminHeader({
     useRef<HTMLDivElement | null>(
       null
     );
+
+  /*
+   * --------------------------------
+   * ADMIN DISPLAY
+   * --------------------------------
+   */
 
   const fullName =
     admin.fullName?.trim() ||
@@ -119,108 +193,172 @@ export default function AdminHeader({
       .toUpperCase() ||
     "A";
 
-  const loadNotifications =
-    useCallback(
-      async (
-        showLoading =
+  /*
+   * --------------------------------
+   * MANUAL NOTIFICATION REFRESH
+   * --------------------------------
+   *
+   * Used from user events such as
+   * opening the notification dropdown.
+   */
+
+  async function loadNotifications(
+    showLoading =
+      false
+  ) {
+    try {
+      if (
+        showLoading
+      ) {
+        setIsLoadingNotifications(
+          true
+        );
+      }
+
+      const data =
+        await fetchAdminNotifications();
+
+      setNotifications(
+        data.notifications
+      );
+
+      setUnreadCount(
+        Number(
+          data.unreadCount
+        ) || 0
+      );
+    } catch (error) {
+      console.error(
+        "Load admin notifications error:",
+        error
+      );
+    } finally {
+      if (
+        showLoading
+      ) {
+        setIsLoadingNotifications(
           false
-      ) => {
-        try {
+        );
+      }
+    }
+  }
+
+  /*
+   * --------------------------------
+   * INITIAL LOAD + POLLING
+   * --------------------------------
+   *
+   * Important:
+   * We do not directly call a helper
+   * which synchronously mutates state
+   * from the effect.
+   *
+   * The API function returns data.
+   * State changes happen only after
+   * the asynchronous request resolves.
+   */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    void fetchAdminNotifications()
+      .then(
+        (data) => {
           if (
-            showLoading
-          ) {
-            setIsLoadingNotifications(
-              true
-            );
-          }
-
-          const response =
-            await fetch(
-              "/api/admin/notifications",
-              {
-                method:
-                  "GET",
-
-                cache:
-                  "no-store",
-              }
-            );
-
-          if (
-            !response.ok
-          ) {
-            return;
-          }
-
-          const result =
-            await response.json();
-
-          if (
-            !result.success
+            cancelled
           ) {
             return;
           }
 
           setNotifications(
-            result.data
-              .notifications
+            data.notifications
           );
 
           setUnreadCount(
-            result.data
-              .unreadCount
+            Number(
+              data.unreadCount
+            ) || 0
           );
-        } catch (
-          error
-        ) {
+        }
+      )
+      .catch(
+        (error) => {
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
           console.error(
-            "Load admin notifications error:",
+            "Initial admin notifications load error:",
             error
           );
-        } finally {
-          if (
-            showLoading
-          ) {
-            setIsLoadingNotifications(
-              false
-            );
-          }
         }
-      },
-      []
-    );
+      );
 
-  /*
-   * Initial load + polling.
-   *
-   * This allows the admin bell
-   * to discover new orders
-   * without manually refreshing.
-   */
-  useEffect(() => {
-    void loadNotifications();
+    /*
+     * Check periodically for
+     * new orders/cancellations.
+     */
 
     const interval =
       window.setInterval(
         () => {
-          void loadNotifications();
+          void fetchAdminNotifications()
+            .then(
+              (data) => {
+                if (
+                  cancelled
+                ) {
+                  return;
+                }
+
+                setNotifications(
+                  data.notifications
+                );
+
+                setUnreadCount(
+                  Number(
+                    data.unreadCount
+                  ) || 0
+                );
+              }
+            )
+            .catch(
+              (error) => {
+                if (
+                  cancelled
+                ) {
+                  return;
+                }
+
+                console.error(
+                  "Admin notification polling error:",
+                  error
+                );
+              }
+            );
         },
         30000
       );
 
     return () => {
+      cancelled =
+        true;
+
       window.clearInterval(
         interval
       );
     };
-  }, [
-    loadNotifications,
-  ]);
+  }, []);
 
   /*
-   * Close dropdowns when
-   * clicking outside.
+   * --------------------------------
+   * OUTSIDE CLICK
+   * --------------------------------
    */
+
   useEffect(() => {
     function handleOutsideClick(
       event: MouseEvent
@@ -264,6 +402,12 @@ export default function AdminHeader({
     };
   }, []);
 
+  /*
+   * --------------------------------
+   * SINGLE NOTIFICATION CLICK
+   * --------------------------------
+   */
+
   async function handleNotificationClick(
     notification:
       AdminNotification
@@ -271,6 +415,7 @@ export default function AdminHeader({
     /*
      * Optimistically update UI.
      */
+
     if (
       !notification.isRead
     ) {
@@ -282,6 +427,7 @@ export default function AdminHeader({
               notification.id
                 ? {
                     ...item,
+
                     isRead:
                       true,
                   }
@@ -298,31 +444,43 @@ export default function AdminHeader({
       );
 
       try {
-        await fetch(
-          "/api/admin/notifications",
-          {
-            method:
-              "PATCH",
+        const response =
+          await fetch(
+            "/api/admin/notifications",
+            {
+              method:
+                "PATCH",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
 
-            body:
-              JSON.stringify({
-                notificationId:
-                  notification.id,
-              }),
-          }
-        );
-      } catch (
-        error
-      ) {
+              body:
+                JSON.stringify({
+                  notificationId:
+                    notification.id,
+                }),
+            }
+          );
+
+        if (
+          !response.ok
+        ) {
+          /*
+           * If server update fails,
+           * refresh server state.
+           */
+
+          void loadNotifications();
+        }
+      } catch (error) {
         console.error(
           "Mark notification read error:",
           error
         );
+
+        void loadNotifications();
       }
     }
 
@@ -338,6 +496,12 @@ export default function AdminHeader({
       );
     }
   }
+
+  /*
+   * --------------------------------
+   * MARK ALL READ
+   * --------------------------------
+   */
 
   async function handleMarkAllRead() {
     if (
@@ -383,6 +547,7 @@ export default function AdminHeader({
           current.map(
             (item) => ({
               ...item,
+
               isRead:
                 true,
             })
@@ -392,9 +557,7 @@ export default function AdminHeader({
       setUnreadCount(
         0
       );
-    } catch (
-      error
-    ) {
+    } catch (error) {
       console.error(
         "Mark all notifications read error:",
         error
@@ -406,7 +569,19 @@ export default function AdminHeader({
     }
   }
 
+  /*
+   * --------------------------------
+   * LOGOUT
+   * --------------------------------
+   */
+
   async function handleLogout() {
+    if (
+      isLoggingOut
+    ) {
+      return;
+    }
+
     try {
       setIsLoggingOut(
         true
@@ -427,14 +602,20 @@ export default function AdminHeader({
         return;
       }
 
+      setProfileOpen(
+        false
+      );
+
+      setNotificationOpen(
+        false
+      );
+
       router.replace(
         "/login"
       );
 
       router.refresh();
-    } catch (
-      error
-    ) {
+    } catch (error) {
       console.error(
         "Admin logout error:",
         error
@@ -446,19 +627,32 @@ export default function AdminHeader({
     }
   }
 
+  /*
+   * --------------------------------
+   * UI
+   * --------------------------------
+   */
+
   return (
     <header className="sticky top-0 z-40 h-14 border-b border-gray-200 bg-white">
       <div className="flex h-full items-center justify-between px-4 sm:px-5 lg:px-6">
         {/* Brand */}
 
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white shadow-sm">
-            E
-          </div>
+           <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
+    <Image
+      src="/products/budget-vibe.png"
+      alt="Sasta-pak Logo"
+      fill
+      sizes="32px"
+      className="object-contain"
+      priority
+    />
+  </div>
 
           <div>
             <p className="text-sm font-semibold leading-none text-gray-900">
-              E-commerce
+              BudgetVibe
             </p>
 
             <p className="mt-1 hidden text-[11px] leading-none text-gray-400 sm:block">
@@ -478,6 +672,8 @@ export default function AdminHeader({
             }
             className="relative"
           >
+            {/* Bell */}
+
             <button
               type="button"
               onClick={() => {
@@ -492,6 +688,11 @@ export default function AdminHeader({
                   false
                 );
 
+                /*
+                 * Refresh immediately when
+                 * admin opens notifications.
+                 */
+
                 if (
                   nextOpen
                 ) {
@@ -501,7 +702,7 @@ export default function AdminHeader({
                 }
               }}
               className="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-800"
-              aria-label="Notifications"
+              aria-label={`Notifications. ${unreadCount} unread`}
               aria-expanded={
                 notificationOpen
               }
@@ -512,9 +713,11 @@ export default function AdminHeader({
                 }
               />
 
+              {/* Unread Badge */}
+
               {unreadCount >
               0 ? (
-                <span className="absolute right-0.5 top-0.5 flex min-h-[15px] min-w-[15px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-semibold leading-none text-white">
+                <span className="absolute right-0.5 top-0.5 flex min-h-3.75 min-w-3.75 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-semibold leading-none text-white">
                   {unreadCount >
                   99
                     ? "99+"
@@ -523,9 +726,11 @@ export default function AdminHeader({
               ) : null}
             </button>
 
+            {/* Notification Dropdown */}
+
             {notificationOpen ? (
-              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[340px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl shadow-gray-200/60">
-                {/* Header */}
+              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-85 max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl shadow-gray-200/60">
+                {/* Dropdown Header */}
 
                 <div className="flex items-center justify-between border-b border-gray-100 px-3.5 py-3">
                   <div>
@@ -541,6 +746,8 @@ export default function AdminHeader({
                     </p>
                   </div>
 
+                  {/* Mark All */}
+
                   {unreadCount >
                   0 ? (
                     <button
@@ -551,7 +758,7 @@ export default function AdminHeader({
                       disabled={
                         isMarkingAll
                       }
-                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium text-blue-600 transition hover:bg-blue-50 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium text-blue-600 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <CheckCheck
                         size={
@@ -566,12 +773,14 @@ export default function AdminHeader({
                   ) : null}
                 </div>
 
-                {/* Notifications */}
+                {/* Notification List */}
 
-                <div className="max-h-[360px] overflow-y-auto">
+                <div className="max-h-90 overflow-y-auto">
                   {isLoadingNotifications &&
                   notifications.length ===
                     0 ? (
+                    /* Loading */
+
                     <div className="px-4 py-10 text-center">
                       <p className="text-xs text-gray-400">
                         Loading
@@ -580,6 +789,8 @@ export default function AdminHeader({
                     </div>
                   ) : notifications.length ===
                     0 ? (
+                    /* Empty */
+
                     <div className="px-4 py-10 text-center">
                       <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-gray-100">
                         <Bell
@@ -591,17 +802,17 @@ export default function AdminHeader({
                       </div>
 
                       <p className="mt-2 text-xs font-medium text-gray-700">
-                        No
-                        notifications
+                        No notifications
                       </p>
 
                       <p className="mt-1 text-[10px] text-gray-400">
-                        New orders
-                        will appear
-                        here.
+                        New orders will
+                        appear here.
                       </p>
                     </div>
                   ) : (
+                    /* Notifications */
+
                     notifications.map(
                       (
                         notification
@@ -612,7 +823,7 @@ export default function AdminHeader({
                           }
                           type="button"
                           onClick={() =>
-                            handleNotificationClick(
+                            void handleNotificationClick(
                               notification
                             )
                           }
@@ -622,7 +833,7 @@ export default function AdminHeader({
                               : "bg-white"
                           }`}
                         >
-                          {/* Icon */}
+                          {/* Notification Icon */}
 
                           <div
                             className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
@@ -639,7 +850,7 @@ export default function AdminHeader({
                             />
                           </div>
 
-                          {/* Content */}
+                          {/* Notification Content */}
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
@@ -687,6 +898,8 @@ export default function AdminHeader({
             }
             className="relative"
           >
+            {/* Profile Trigger */}
+
             <button
               type="button"
               onClick={() => {
@@ -702,17 +915,22 @@ export default function AdminHeader({
                 );
               }}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-gray-50"
+              aria-label="Open admin profile menu"
               aria-expanded={
                 profileOpen
               }
             >
+              {/* Avatar */}
+
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
                 {
                   initial
                 }
               </span>
 
-              <div className="hidden max-w-[170px] text-left sm:block">
+              {/* Admin Details */}
+
+              <div className="hidden max-w-42.5 text-left sm:block">
                 <p className="truncate text-xs font-medium leading-4 text-gray-800">
                   {
                     fullName
@@ -738,6 +956,8 @@ export default function AdminHeader({
               />
             </button>
 
+            {/* Profile Dropdown */}
+
             {profileOpen ? (
               <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl shadow-gray-200/60">
                 {/* Mobile Profile */}
@@ -761,8 +981,8 @@ export default function AdminHeader({
                 <div className="p-1.5">
                   <button
                     type="button"
-                    onClick={
-                      handleLogout
+                    onClick={() =>
+                      void handleLogout()
                     }
                     disabled={
                       isLoggingOut
@@ -789,6 +1009,12 @@ export default function AdminHeader({
   );
 }
 
+/*
+ * --------------------------------
+ * RELATIVE TIME
+ * --------------------------------
+ */
+
 function formatRelativeTime(
   value: string
 ) {
@@ -799,9 +1025,20 @@ function formatRelativeTime(
     Date.now() -
     date.getTime();
 
+  /*
+   * Handle dates that may be
+   * slightly ahead due to clocks.
+   */
+
+  const safeDifference =
+    Math.max(
+      0,
+      difference
+    );
+
   const seconds =
     Math.floor(
-      difference /
+      safeDifference /
         1000
     );
 

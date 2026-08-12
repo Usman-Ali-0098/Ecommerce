@@ -219,8 +219,8 @@ export default function ProductCard({
       !session?.user
     ) {
       showAlert(
-        "Please login to add products to your cart.",
-        "warning"
+        "Please login to add products to your cart.",{
+         variant : "warning"}
       );
 
       return;
@@ -230,8 +230,10 @@ export default function ProductCard({
       !selectedVariant
     ) {
       showAlert(
-        "Please select the required product options.",
-        "warning"
+        "Please select the required product options.",{
+
+          variant:"warning"
+        }
       );
 
       return;
@@ -242,8 +244,10 @@ export default function ProductCard({
       0
     ) {
       showAlert(
-        "This item is out of stock.",
-        "error"
+        "This item is out of stock.",{
+
+          variant:"error"
+        }
       );
 
       return;
@@ -284,8 +288,10 @@ export default function ProductCard({
       ) {
         showAlert(
           result.message ??
-            "Unable to add product to cart.",
-          "error"
+            "Unable to add product to cart.",{
+
+              variant:"error"
+            }
         );
 
         return;
@@ -294,7 +300,10 @@ export default function ProductCard({
       showAlert(
         result.message ??
           "Product added to cart successfully.",
-        "success"
+          {
+
+            variant:"success"
+          }
       );
 
       notifyCartUpdated();
@@ -309,8 +318,9 @@ export default function ProductCard({
       );
 
       showAlert(
-        "Something went wrong while adding the product.",
-        "error"
+        "Something went wrong while adding the product.",{
+        variant: "error",
+        }
       );
     } finally {
       setIsAdding(
@@ -329,7 +339,7 @@ export default function ProductCard({
     <article className="flex h-full flex-col overflow-hidden rounded-md border border-[#d9dee7] bg-white transition-shadow hover:shadow-sm">
       {/* Product Image */}
 
-      <div className="relative mx-3 mt-3 h-[190px] overflow-hidden rounded-[3px] bg-[#f5f5f5]">
+      <div className="relative mx-3 mt-3 h-47.5 overflow-hidden rounded-[3px] bg-[#f5f5f5]">
         {product.image ? (
           <Image
             src={
@@ -363,11 +373,11 @@ export default function ProductCard({
       <div className="flex flex-1 flex-col p-3">
         {/* Product Name */}
 
-        <h2 className="min-h-[38px] text-[13px] font-semibold leading-[19px] text-[#20252c]">
+        <h2 className="min-h-9.5 text-[13px] font-semibold leading-4.75 text-[#20252c]">
   {product.name}
 </h2>
 
-<div className="mt-1 min-h-[32px]">
+<div className="mt-1 min-h-8">
   {product.description ? (
     <p className="line-clamp-2 text-[11px] leading-4 text-gray-500">
       {product.description}
@@ -431,7 +441,7 @@ export default function ProductCard({
               sizes.length ===
               0
             }
-            className="h-9 w-full min-w-0 rounded-[4px] border border-[#d6dde7] bg-white px-2 text-[11px] text-gray-600 outline-none transition focus:border-[#087ff5] disabled:bg-gray-50 disabled:text-gray-400"
+            className="h-9 w-full min-w-0 rounded-sm border border-[#d6dde7] bg-white px-2 text-[11px] text-gray-600 outline-none transition focus:border-[#087ff5] disabled:bg-gray-50 disabled:text-gray-400"
           >
             <option value="">
               {sizes.length
@@ -479,7 +489,7 @@ export default function ProductCard({
               colors.length ===
               0
             }
-            className="h-9 w-full min-w-0 rounded-[4px] border border-[#d6dde7] bg-white px-2 text-[11px] text-gray-600 outline-none transition focus:border-[#087ff5] disabled:bg-gray-50 disabled:text-gray-400"
+            className="h-9 w-full min-w-0 rounded-sm border border-[#d6dde7] bg-white px-2 text-[11px] text-gray-600 outline-none transition focus:border-[#087ff5] disabled:bg-gray-50 disabled:text-gray-400"
           >
             <option value="">
               {colors.length
@@ -521,7 +531,7 @@ export default function ProductCard({
                 quantity <= 1
               }
               aria-label="Decrease quantity"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-l-[4px] border border-[#d6dde7] text-base font-light text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-8"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-l-sm border border-[#d6dde7] text-base font-light text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-8"
             >
               −
             </button>
@@ -541,7 +551,7 @@ export default function ProductCard({
                   availableStock
               }
               aria-label="Increase quantity"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-[4px] border border-[#d6dde7] text-base font-light text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-8"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-sm border border-[#d6dde7] text-base font-light text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-8"
             >
               +
             </button>
@@ -560,7 +570,7 @@ export default function ProductCard({
               status ===
                 "loading"
             }
-            className="h-9 w-full rounded-[4px] bg-[#087ff5] px-3 text-xs font-semibold text-white transition hover:bg-[#006fdb] disabled:cursor-not-allowed disabled:bg-gray-300 sm:flex-1"
+            className="h-9 w-full rounded-sm bg-[#087ff5] px-3 text-xs font-semibold text-white transition hover:bg-[#006fdb] disabled:cursor-not-allowed disabled:bg-gray-300 sm:flex-1"
           >
             {isAdding
               ? "Adding..."

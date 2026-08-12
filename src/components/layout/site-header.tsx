@@ -2,11 +2,7 @@
 
 import Link from "next/link";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Image from "next/image";
 
@@ -22,24 +18,15 @@ import {
   X,
 } from "lucide-react";
 
-import {
-  signOut,
-  useSession,
-} from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 
-import {
-  usePathname,
-} from "next/navigation";
+import { usePathname } from "next/navigation";
 
 import NotificationDropdown from "@/components/notifications/notification-dropdown";
 
-import {
-  CART_UPDATED_EVENT,
-} from "@/lib/cart-events";
+import { CART_UPDATED_EVENT } from "@/lib/cart-events";
 
-import {
-  NOTIFICATION_UPDATED_EVENT,
-} from "@/lib/notification-events";
+import { NOTIFICATION_UPDATED_EVENT } from "@/lib/notification-events";
 
 const navigation = [
   {
@@ -65,29 +52,17 @@ const navigation = [
  */
 
 async function fetchCartCount() {
-  const response =
-    await fetch(
-      "/api/cart/count",
-      {
-        cache:
-          "no-store",
-      }
-    );
+  const response = await fetch("/api/cart/count", {
+    cache: "no-store",
+  });
 
   if (!response.ok) {
-    throw new Error(
-      `Unable to load cart count. Status: ${response.status}`
-    );
+    throw new Error(`Unable to load cart count. Status: ${response.status}`);
   }
 
-  const result =
-    await response.json();
+  const result = await response.json();
 
-  return (
-    Number(
-      result.count
-    ) || 0
-  );
+  return Number(result.count) || 0;
 }
 
 /*
@@ -97,40 +72,25 @@ async function fetchCartCount() {
  */
 
 async function fetchNotificationCount() {
-  const response =
-    await fetch(
-      "/api/notifications?limit=1",
-      {
-        cache:
-          "no-store",
-      }
-    );
+  const response = await fetch("/api/notifications?limit=1", {
+    cache: "no-store",
+  });
 
   if (!response.ok) {
     throw new Error(
-      `Unable to load notification count. Status: ${response.status}`
+      `Unable to load notification count. Status: ${response.status}`,
     );
   }
 
-  const result =
-    await response.json();
+  const result = await response.json();
 
-  return (
-    Number(
-      result.data
-        ?.unreadCount
-    ) || 0
-  );
+  return Number(result.data?.unreadCount) || 0;
 }
 
 export default function SiteHeader() {
-  const {
-    data: session,
-    status,
-  } = useSession();
+  const { data: session, status } = useSession();
 
-  const pathname =
-    usePathname();
+  const pathname = usePathname();
 
   /*
    * --------------------------------
@@ -138,20 +98,11 @@ export default function SiteHeader() {
    * --------------------------------
    */
 
-  const [
-    accountOpen,
-    setAccountOpen,
-  ] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
-  const [
-    notificationsOpen,
-    setNotificationsOpen,
-  ] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const [
-    mobileOpen,
-    setMobileOpen,
-  ] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   /*
    * --------------------------------
@@ -159,15 +110,9 @@ export default function SiteHeader() {
    * --------------------------------
    */
 
-  const [
-    cartCount,
-    setCartCount,
-  ] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
 
-  const [
-    unreadNotificationCount,
-    setUnreadNotificationCount,
-  ] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   /*
    * --------------------------------
@@ -175,15 +120,9 @@ export default function SiteHeader() {
    * --------------------------------
    */
 
-  const accountRef =
-    useRef<HTMLDivElement | null>(
-      null
-    );
+  const accountRef = useRef<HTMLDivElement | null>(null);
 
-  const notificationRef =
-    useRef<HTMLDivElement | null>(
-      null
-    );
+  const notificationRef = useRef<HTMLDivElement | null>(null);
 
   /*
    * --------------------------------
@@ -201,50 +140,28 @@ export default function SiteHeader() {
    */
 
   useEffect(() => {
-    if (
-      status !==
-      "authenticated"
-    ) {
+    if (status !== "authenticated") {
       return;
     }
 
-    let cancelled =
-      false;
+    let cancelled = false;
 
-    Promise.all([
-      fetchCartCount(),
-      fetchNotificationCount(),
-    ])
-      .then(
-        ([
-          nextCartCount,
-          nextNotificationCount,
-        ]) => {
-          if (cancelled) {
-            return;
-          }
-
-          setCartCount(
-            nextCartCount
-          );
-
-          setUnreadNotificationCount(
-            nextNotificationCount
-          );
+    Promise.all([fetchCartCount(), fetchNotificationCount()])
+      .then(([nextCartCount, nextNotificationCount]) => {
+        if (cancelled) {
+          return;
         }
-      )
-      .catch(
-        (error) => {
-          console.error(
-            "Load header counters error:",
-            error
-          );
-        }
-      );
+
+        setCartCount(nextCartCount);
+
+        setUnreadNotificationCount(nextNotificationCount);
+      })
+      .catch((error) => {
+        console.error("Load header counters error:", error);
+      });
 
     return () => {
-      cancelled =
-        true;
+      cancelled = true;
     };
   }, [status]);
 
@@ -256,43 +173,23 @@ export default function SiteHeader() {
 
   useEffect(() => {
     function handleCartUpdated() {
-      if (
-        status !==
-        "authenticated"
-      ) {
+      if (status !== "authenticated") {
         return;
       }
 
       void fetchCartCount()
-        .then(
-          (
-            nextCartCount
-          ) => {
-            setCartCount(
-              nextCartCount
-            );
-          }
-        )
-        .catch(
-          (error) => {
-            console.error(
-              "Load cart count error:",
-              error
-            );
-          }
-        );
+        .then((nextCartCount) => {
+          setCartCount(nextCartCount);
+        })
+        .catch((error) => {
+          console.error("Load cart count error:", error);
+        });
     }
 
-    window.addEventListener(
-      CART_UPDATED_EVENT,
-      handleCartUpdated
-    );
+    window.addEventListener(CART_UPDATED_EVENT, handleCartUpdated);
 
     return () => {
-      window.removeEventListener(
-        CART_UPDATED_EVENT,
-        handleCartUpdated
-      );
+      window.removeEventListener(CART_UPDATED_EVENT, handleCartUpdated);
     };
   }, [status]);
 
@@ -304,42 +201,28 @@ export default function SiteHeader() {
 
   useEffect(() => {
     function handleNotificationUpdated() {
-      if (
-        status !==
-        "authenticated"
-      ) {
+      if (status !== "authenticated") {
         return;
       }
 
       void fetchNotificationCount()
-        .then(
-          (
-            nextNotificationCount
-          ) => {
-            setUnreadNotificationCount(
-              nextNotificationCount
-            );
-          }
-        )
-        .catch(
-          (error) => {
-            console.error(
-              "Load notification count error:",
-              error
-            );
-          }
-        );
+        .then((nextNotificationCount) => {
+          setUnreadNotificationCount(nextNotificationCount);
+        })
+        .catch((error) => {
+          console.error("Load notification count error:", error);
+        });
     }
 
     window.addEventListener(
       NOTIFICATION_UPDATED_EVENT,
-      handleNotificationUpdated
+      handleNotificationUpdated,
     );
 
     return () => {
       window.removeEventListener(
         NOTIFICATION_UPDATED_EVENT,
-        handleNotificationUpdated
+        handleNotificationUpdated,
       );
     };
   }, [status]);
@@ -356,45 +239,25 @@ export default function SiteHeader() {
    */
 
   useEffect(() => {
-    function handleOutsideClick(
-      event: MouseEvent
-    ) {
-      const target =
-        event.target as Node;
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node;
 
-      if (
-        accountRef.current &&
-        !accountRef.current.contains(
-          target
-        )
-      ) {
-        setAccountOpen(
-          false
-        );
+      if (accountRef.current && !accountRef.current.contains(target)) {
+        setAccountOpen(false);
       }
 
       if (
         notificationRef.current &&
-        !notificationRef.current.contains(
-          target
-        )
+        !notificationRef.current.contains(target)
       ) {
-        setNotificationsOpen(
-          false
-        );
+        setNotificationsOpen(false);
       }
     }
 
-    document.addEventListener(
-      "mousedown",
-      handleOutsideClick
-    );
+    document.addEventListener("mousedown", handleOutsideClick);
 
     return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleOutsideClick
-      );
+      document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, []);
 
@@ -407,16 +270,9 @@ export default function SiteHeader() {
    * exposes fullName.
    */
 
-  const fullName =
-    session?.user?.fullName ||
-    "User";
+  const fullName = session?.user?.fullName || "User";
 
-  const initial =
-    fullName
-      .trim()
-      .charAt(0)
-      .toUpperCase() ||
-    "U";
+  const initial = fullName.trim().charAt(0).toUpperCase() || "U";
 
   /*
    * --------------------------------
@@ -429,21 +285,15 @@ export default function SiteHeader() {
    */
 
   async function handleAdminLogin() {
-    setAccountOpen(
-      false
-    );
+    setAccountOpen(false);
 
-    setNotificationsOpen(
-      false
-    );
+    setNotificationsOpen(false);
 
     await signOut({
-      redirect:
-        false,
+      redirect: false,
     });
 
-    window.location.href =
-      "/login";
+    window.location.href = "/login";
   }
 
   /*
@@ -453,17 +303,12 @@ export default function SiteHeader() {
    */
 
   async function handleLogout() {
-    setAccountOpen(
-      false
-    );
+    setAccountOpen(false);
 
-    setNotificationsOpen(
-      false
-    );
+    setNotificationsOpen(false);
 
     await signOut({
-      callbackUrl:
-        "/",
+      callbackUrl: "/",
     });
   }
 
@@ -480,24 +325,21 @@ export default function SiteHeader() {
       <div className="mx-auto flex h-14 w-full max-w-350 items-center gap-4 px-4 sm:px-6 lg:px-8">
         {/* Logo */}
 
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2"
-        >
-         <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
-    <Image
-      src="/products/sasta_pak_logo.svg"
-      alt="Sasta-pak Logo"
-      fill
-      sizes="32px"
-      className="object-contain"
-      priority
-    />
-  </div>
+        <Link href="/" className="flex shrink-0 items-center gap-2">
+          <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
+            <Image
+              src="/products/budget-vibe.png"
+              alt="Sasta-pak Logo"
+              fill
+              sizes="32px"
+              className="object-contain"
+              priority
+            />
+          </div>
 
           <div className="hidden sm:block">
             <p className="text-sm font-semibold leading-none tracking-tight text-gray-900">
-              SASTAPAK
+              BudgetVibe
             </p>
 
             <p className="mt-1 text-[10px] leading-none text-gray-400">
@@ -506,66 +348,34 @@ export default function SiteHeader() {
           </div>
         </Link>
 
-        
-
-      
-
         {/* Right Actions */}
 
         <div className="ml-auto flex items-center gap-1">
           {/* Notifications */}
 
-          {status ===
-          "authenticated" ? (
-            <div
-              ref={
-                notificationRef
-              }
-              className="relative"
-            >
+          {status === "authenticated" ? (
+            <div ref={notificationRef} className="relative">
               <button
                 type="button"
                 aria-label={`Notifications. ${unreadNotificationCount} unread`}
                 onClick={() => {
-                  setNotificationsOpen(
-                    (
-                      current
-                    ) =>
-                      !current
-                  );
+                  setNotificationsOpen((current) => !current);
 
-                  setAccountOpen(
-                    false
-                  );
+                  setAccountOpen(false);
                 }}
                 className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-900"
               >
-                <Bell
-                  size={17}
-                />
+                <Bell size={17} />
 
-                {unreadNotificationCount >
-                0 ? (
-                  <CountBadge
-                    count={
-                      unreadNotificationCount
-                    }
-                  />
+                {unreadNotificationCount > 0 ? (
+                  <CountBadge count={unreadNotificationCount} />
                 ) : null}
               </button>
 
               <NotificationDropdown
-                open={
-                  notificationsOpen
-                }
-                onClose={() =>
-                  setNotificationsOpen(
-                    false
-                  )
-                }
-                onUnreadCountChange={
-                  setUnreadNotificationCount
-                }
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                onUnreadCountChange={setUnreadNotificationCount}
               />
             </div>
           ) : null}
@@ -575,83 +385,53 @@ export default function SiteHeader() {
           <Link
             href="/cart"
             aria-label={
-              status ===
-              "authenticated"
+              status === "authenticated"
                 ? `Shopping cart with ${cartCount} item(s)`
                 : "Shopping cart"
             }
             className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-900"
           >
-            <ShoppingBag
-              size={17}
-            />
+            <ShoppingBag size={17} />
 
-            {status ===
-              "authenticated" &&
-            cartCount > 0 ? (
-              <CountBadge
-                count={
-                  cartCount
-                }
-              />
+            {status === "authenticated" && cartCount > 0 ? (
+              <CountBadge count={cartCount} />
             ) : null}
           </Link>
 
           {/* Session Loading */}
 
-          {status ===
-          "loading" ? (
+          {status === "loading" ? (
             <div className="ml-1 h-8 w-20 animate-pulse rounded-lg bg-gray-100" />
           ) : null}
 
           {/* Login */}
 
-          {status ===
-          "unauthenticated" ? (
+          {status === "unauthenticated" ? (
             <Link
               href="/login"
               className="ml-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 text-xs font-medium text-white transition hover:bg-blue-700"
             >
-              <LogIn
-                size={14}
-              />
+              <LogIn size={14} />
 
-              <span className="hidden sm:inline">
-                Login
-              </span>
+              <span className="hidden sm:inline">Login</span>
             </Link>
           ) : null}
 
           {/* Account */}
 
-          {status ===
-          "authenticated" ? (
-            <div
-              ref={
-                accountRef
-              }
-              className="relative ml-1"
-            >
+          {status === "authenticated" ? (
+            <div ref={accountRef} className="relative ml-1">
               {/* Account Trigger */}
 
               <button
                 type="button"
                 onClick={() => {
-                  setAccountOpen(
-                    (
-                      current
-                    ) =>
-                      !current
-                  );
+                  setAccountOpen((current) => !current);
 
-                  setNotificationsOpen(
-                    false
-                  );
+                  setNotificationsOpen(false);
                 }}
                 className="flex h-9 items-center gap-2 rounded-lg px-1.5 transition hover:bg-gray-50 sm:px-2"
-                aria-expanded={
-                  accountOpen
-                }
+                aria-expanded={accountOpen}
                 aria-label="Open account menu"
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[11px] font-semibold text-white">
@@ -665,9 +445,7 @@ export default function SiteHeader() {
                 <ChevronDown
                   size={13}
                   className={`hidden text-gray-400 transition-transform sm:block ${
-                    accountOpen
-                      ? "rotate-180"
-                      : ""
+                    accountOpen ? "rotate-180" : ""
                   }`}
                 />
               </button>
@@ -690,11 +468,7 @@ export default function SiteHeader() {
                         </p>
 
                         <p className="mt-0.5 truncate text-[10px] text-gray-400">
-                          {
-                            session
-                              ?.user
-                              ?.email
-                          }
+                          {session?.user?.email}
                         </p>
                       </div>
                     </div>
@@ -707,17 +481,10 @@ export default function SiteHeader() {
 
                     <Link
                       href="/orders"
-                      onClick={() =>
-                        setAccountOpen(
-                          false
-                        )
-                      }
+                      onClick={() => setAccountOpen(false)}
                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
                     >
-                      <Package
-                        size={14}
-                      />
-
+                      <Package size={14} />
                       My Orders
                     </Link>
 
@@ -725,15 +492,10 @@ export default function SiteHeader() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        void handleAdminLogin()
-                      }
+                      onClick={() => void handleAdminLogin()}
                       className="mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-gray-600 transition hover:bg-blue-50 hover:text-blue-600"
                     >
-                      <UserRound
-                        size={14}
-                      />
-
+                      <UserRound size={14} />
                       Admin Login
                     </button>
 
@@ -741,15 +503,10 @@ export default function SiteHeader() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        void handleLogout()
-                      }
+                      onClick={() => void handleLogout()}
                       className="mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-50"
                     >
-                      <LogOut
-                        size={14}
-                      />
-
+                      <LogOut size={14} />
                       Logout
                     </button>
                   </div>
@@ -762,33 +519,12 @@ export default function SiteHeader() {
 
           <button
             type="button"
-            onClick={() =>
-              setMobileOpen(
-                (
-                  current
-                ) =>
-                  !current
-              )
-            }
+            onClick={() => setMobileOpen((current) => !current)}
             className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 md:hidden"
-            aria-label={
-              mobileOpen
-                ? "Close navigation"
-                : "Open navigation"
-            }
-            aria-expanded={
-              mobileOpen
-            }
+            aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={mobileOpen}
           >
-            {mobileOpen ? (
-              <X
-                size={18}
-              />
-            ) : (
-              <Menu
-                size={18}
-              />
-            )}
+            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </div>
@@ -798,57 +534,35 @@ export default function SiteHeader() {
       {mobileOpen ? (
         <div className="border-t border-gray-100 bg-white px-4 py-3 md:hidden">
           <nav className="space-y-1">
-            {navigation.map(
-              (item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(
-                        item.href
-                      );
+            {navigation.map((item) => {
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
 
-                return (
-                  <Link
-                    key={
-                      item.href
-                    }
-                    href={
-                      item.href
-                    }
-                    onClick={() =>
-                      setMobileOpen(
-                        false
-                      )
-                    }
-                    className={`block rounded-lg px-3 py-2.5 text-xs font-medium transition ${
-                      active
-                        ? "bg-blue-50 text-blue-600"
-                        : "text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    {
-                      item.label
-                    }
-                  </Link>
-                );
-              }
-            )}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`block rounded-lg px-3 py-2.5 text-xs font-medium transition ${
+                    active
+                      ? "bg-blue-50 text-blue-600"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
 
-            {status ===
-            "authenticated" ? (
+            {status === "authenticated" ? (
               <Link
                 href="/orders"
-                onClick={() =>
-                  setMobileOpen(
-                    false
-                  )
-                }
+                onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
               >
-                <Package
-                  size={14}
-                />
-
+                <Package size={14} />
                 My Orders
               </Link>
             ) : null}
@@ -865,16 +579,10 @@ export default function SiteHeader() {
  * --------------------------------
  */
 
-function CountBadge({
-  count,
-}: {
-  count: number;
-}) {
+function CountBadge({ count }: { count: number }) {
   return (
     <span className="absolute -right-0.5 -top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-semibold leading-none text-white ring-2 ring-white">
-      {count > 99
-        ? "99+"
-        : count}
+      {count > 99 ? "99+" : count}
     </span>
   );
 }

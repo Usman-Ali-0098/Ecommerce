@@ -1,16 +1,8 @@
-import type {
-  Prisma,
-} from "@/generated/prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 
-import {
-  prisma,
-} from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
-export type ProductSort =
-  | "newest"
-  | "oldest"
-  | "price-low"
-  | "price-high";
+export type ProductSort = "newest" | "oldest" | "price-low" | "price-high";
 
 type GetPublicProductsParams = {
   category?: string;
@@ -25,8 +17,7 @@ const publicProductInclude = {
 
   images: {
     orderBy: {
-      position:
-        "asc",
+      position: "asc",
     },
   },
 
@@ -36,8 +27,7 @@ const publicProductInclude = {
     },
 
     orderBy: {
-      createdAt:
-        "asc",
+      createdAt: "asc",
     },
 
     include: {
@@ -47,11 +37,9 @@ const publicProductInclude = {
   },
 } satisfies Prisma.ProductInclude;
 
-type ProductWithRelations =
-  Prisma.ProductGetPayload<{
-    include:
-      typeof publicProductInclude;
-  }>;
+type ProductWithRelations = Prisma.ProductGetPayload<{
+  include: typeof publicProductInclude;
+}>;
 
 export async function getPublicProducts({
   category,
@@ -60,132 +48,90 @@ export async function getPublicProducts({
   page = 1,
   pageSize = 12,
 }: GetPublicProductsParams = {}) {
-  const safePage =
-    Math.max(
-      page,
-      1
-    );
+  const safePage = Math.max(page, 1);
 
-  const safePageSize =
-    Math.min(
-      Math.max(
-        pageSize,
-        1
-      ),
-      100
-    );
+  const safePageSize = Math.min(Math.max(pageSize, 1), 100);
 
-  const skip =
-    (safePage - 1) *
-    safePageSize;
+  const skip = (safePage - 1) * safePageSize;
 
-  const where: Prisma.ProductWhereInput =
-    {
+  const where: Prisma.ProductWhereInput = {
+    isActive: true,
+
+    category: {
       isActive: true,
 
-      category: {
-        isActive: true,
-
-        ...(category
-          ? {
-              slug:
-                category,
-            }
-          : {}),
-      },
-
-      variants: {
-        some: {
-          isActive: true,
-        },
-      },
-
-      ...(search
+      ...(category
         ? {
-            OR: [
-              {
-                name: {
-                  contains:
-                    search,
-
-                  mode:
-                    "insensitive",
-                },
-              },
-
-              {
-                description:
-                  {
-                    contains:
-                      search,
-
-                    mode:
-                      "insensitive",
-                  },
-              },
-            ],
+            slug: category,
           }
         : {}),
-    };
+    },
+
+    variants: {
+      some: {
+        isActive: true,
+      },
+    },
+
+    ...(search
+      ? {
+          OR: [
+            {
+              name: {
+                contains: search,
+
+                mode: "insensitive",
+              },
+            },
+
+            {
+              description: {
+                contains: search,
+
+                mode: "insensitive",
+              },
+            },
+          ],
+        }
+      : {}),
+  };
 
   /*
    * Newest / Oldest can be
    * sorted directly by Prisma.
    */
-  if (
-    sort === "newest" ||
-    sort === "oldest"
-  ) {
-    const orderBy: Prisma.ProductOrderByWithRelationInput =
-      {
-        createdAt:
-          sort === "oldest"
-            ? "asc"
-            : "desc",
-      };
+  if (sort === "newest" || sort === "oldest") {
+    const orderBy: Prisma.ProductOrderByWithRelationInput = {
+      createdAt: sort === "oldest" ? "asc" : "desc",
+    };
 
-    const [
-      products,
-      total,
-    ] =
-      await Promise.all([
-        prisma.product.findMany({
-          where,
-          orderBy,
-          skip,
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy,
+        skip,
 
-          take:
-            safePageSize,
+        take: safePageSize,
 
-          include:
-            publicProductInclude,
-        }),
+        include: publicProductInclude,
+      }),
 
-        prisma.product.count({
-          where,
-        }),
-      ]);
+      prisma.product.count({
+        where,
+      }),
+    ]);
 
     return {
-      products:
-        products.map(
-          mapPublicProduct
-        ),
+      products: products.map(mapPublicProduct),
 
       pagination: {
-        page:
-          safePage,
+        page: safePage,
 
-        pageSize:
-          safePageSize,
+        pageSize: safePageSize,
 
         total,
 
-        totalPages:
-          Math.ceil(
-            total /
-              safePageSize
-          ),
+        totalPages: Math.ceil(total / safePageSize),
       },
     };
   }
@@ -204,213 +150,114 @@ export async function getPublicProducts({
    * calculate minPrice, sort,
    * then paginate.
    */
-  const products =
-    await prisma.product.findMany({
-      where,
+  const products = await prisma.product.findMany({
+    where,
 
-      include:
-        publicProductInclude,
-    });
+    include: publicProductInclude,
+  });
 
-  const mappedProducts =
-    products.map(
-      mapPublicProduct
-    );
+  const mappedProducts = products.map(mapPublicProduct);
 
-  mappedProducts.sort(
-    (a, b) => {
-      if (
-        sort ===
-        "price-low"
-      ) {
-        return (
-          a.minPrice -
-          b.minPrice
-        );
-      }
-
-      return (
-        b.minPrice -
-        a.minPrice
-      );
+  mappedProducts.sort((a, b) => {
+    if (sort === "price-low") {
+      return a.minPrice - b.minPrice;
     }
-  );
 
-  const total =
-    mappedProducts.length;
+    return b.minPrice - a.minPrice;
+  });
 
-  const paginatedProducts =
-    mappedProducts.slice(
-      skip,
-      skip +
-        safePageSize
-    );
+  const total = mappedProducts.length;
+
+  const paginatedProducts = mappedProducts.slice(skip, skip + safePageSize);
 
   return {
-    products:
-      paginatedProducts,
+    products: paginatedProducts,
 
     pagination: {
-      page:
-        safePage,
+      page: safePage,
 
-      pageSize:
-        safePageSize,
+      pageSize: safePageSize,
 
       total,
 
-      totalPages:
-        Math.ceil(
-          total /
-            safePageSize
-        ),
+      totalPages: Math.ceil(total / safePageSize),
     },
   };
 }
 
-function mapPublicProduct(
-  product:
-    ProductWithRelations
-) {
+function mapPublicProduct(product: ProductWithRelations) {
   const primaryImage =
-    product.images.find(
-      (image) =>
-        image.isPrimary
-    ) ??
+    product.images.find((image) => image.isPrimary) ??
     product.images[0] ??
     null;
 
-  const variants =
-    product.variants.map(
-      (variant) => ({
-        id:
-          variant.id,
+  const variants = product.variants.map((variant) => ({
+    id: variant.id,
 
-        sku:
-          variant.sku,
+    sku: variant.sku,
 
-        price:
-          Number(
-            variant.price
-          ),
+    price: Number(variant.price),
 
-        stock:
-          variant.stock,
+    stock: variant.stock,
 
-        color:
-          variant.color
-            ? {
-                id:
-                  variant
-                    .color
-                    .id,
+    color: variant.color
+      ? {
+          id: variant.color.id,
 
-                name:
-                  variant
-                    .color
-                    .name,
+          name: variant.color.name,
 
-                hexacode:
-                  variant
-                    .color
-                    .hexacode,
-              }
-            : null,
+          hexacode: variant.color.hexacode,
+        }
+      : null,
 
-        size:
-          variant.size
-            ? {
-                id:
-                  variant
-                    .size
-                    .id,
+    size: variant.size
+      ? {
+          id: variant.size.id,
 
-                name:
-                  variant
-                    .size
-                    .name,
+          name: variant.size.name,
 
-                sortOrder:
-                  variant
-                    .size
-                    .sortOrder,
-              }
-            : null,
-      })
-    );
+          sortOrder: variant.size.sortOrder,
+        }
+      : null,
+  }));
 
-  const prices =
-    variants.map(
-      (variant) =>
-        variant.price
-    );
+  const prices = variants.map((variant) => variant.price);
 
-  const minPrice =
-    prices.length > 0
-      ? Math.min(
-          ...prices
-        )
-      : 0;
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
 
-  const maxPrice =
-    prices.length > 0
-      ? Math.max(
-          ...prices
-        )
-      : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
 
-  const totalStock =
-    variants.reduce(
-      (
-        total,
-        variant
-      ) =>
-        total +
-        variant.stock,
-      0
-    );
+  const totalStock = variants.reduce(
+    (total, variant) => total + variant.stock,
+    0,
+  );
 
   return {
-    id:
-      product.id,
+    id: product.id,
 
-    name:
-      product.name,
+    name: product.name,
 
-    slug:
-      product.slug,
+    slug: product.slug,
 
-    description:
-      product.description,
+    description: product.description,
 
     category: {
-      id:
-        product
-          .category.id,
+      id: product.category.id,
 
-      name:
-        product
-          .category.name,
+      name: product.category.name,
 
-      slug:
-        product
-          .category.slug,
+      slug: product.category.slug,
     },
 
-    image:
-      primaryImage
-        ? {
-            id:
-              primaryImage.id,
+    image: primaryImage
+      ? {
+          id: primaryImage.id,
 
-            url:
-              primaryImage.url,
+          url: primaryImage.url,
 
-            altText:
-              primaryImage.altText ??
-              product.name,
-          }
-        : null,
+          altText: primaryImage.altText ?? product.name,
+        }
+      : null,
 
     variants,
 
