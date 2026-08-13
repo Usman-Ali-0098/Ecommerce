@@ -4,19 +4,14 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 
 export async function POST(request: Request) {
-
   try {
-
     // 1. Read request body
     const body = await request.json();
 
-
-    // 2. Validate request data
+    // 2. Validate credentials signup
     const result = signupSchema.safeParse(body);
 
-
     if (!result.success) {
-
       return NextResponse.json(
         {
           success: false,
@@ -24,26 +19,20 @@ export async function POST(request: Request) {
         },
         {
           status: 400,
-        }
+        },
       );
-
     }
 
-
-    // After validation, data is safe to use
     const data = result.data;
 
-
-    // 3. Check if email already exists
+    // 3. Check whether email already exists
     const existingUser = await prisma.user.findUnique({
       where: {
         email: data.email,
       },
     });
 
-
     if (existingUser) {
-
       return NextResponse.json(
         {
           success: false,
@@ -51,45 +40,32 @@ export async function POST(request: Request) {
         },
         {
           status: 409,
-        }
+        },
       );
-
     }
 
+    // 4. Hash credentials password
+    const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // 4. Hash password
-    const hashedPassword = await bcrypt.hash(
-      data.password,
-      10
-    );
-
-
-    // 5. Create user in database
+    // 5. Create credentials customer
     const user = await prisma.user.create({
-
       data: {
-
         fullName: data.fullName,
-
         email: data.email,
-
-        password: hashedPassword,
-
         mobile: data.mobile,
-
+        password: hashedPassword,
       },
+
       select: {
         id: true,
         fullName: true,
         email: true,
         mobile: true,
         role: true,
-      }
-
+      },
     });
 
-
-    // 6. Success response
+    // 6. Send safe response
     return NextResponse.json(
       {
         success: true,
@@ -98,15 +74,10 @@ export async function POST(request: Request) {
       },
       {
         status: 201,
-      }
+      },
     );
-
-
   } catch (error) {
-
-
     console.error("Signup Error:", error);
-
 
     return NextResponse.json(
       {
@@ -115,10 +86,7 @@ export async function POST(request: Request) {
       },
       {
         status: 500,
-      }
+      },
     );
-
-
   }
-
-}   
+}

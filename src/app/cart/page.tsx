@@ -1,52 +1,35 @@
 import Link from "next/link";
 
-import {
-  redirect,
-} from "next/navigation";
+import { redirect } from "next/navigation";
 
-import {
-  auth,
-} from "@/auth";
+import { auth } from "@/auth";
 
 import CartClient from "@/components/cart/cart-client";
 import SiteHeader from "@/components/layout/site-header";
 
-import {
-  getUserCart,
-} from "@/lib/services/cart.service";
+import { getUserCart } from "@/lib/services/cart.service";
 
 export default async function CartPage() {
-  const session =
-    await auth();
+  const session = await auth();
 
   if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const userId =
-    Number(
-      session.user.id
-    );
+  const userId = Number(session.user.id);
 
-  if (
-    !Number.isInteger(
-      userId
-    )
-  ) {
+  if (!Number.isInteger(userId)) {
     redirect("/login");
   }
 
-  const cart =
-    await getUserCart(
-      userId
-    );
+  const cart = await getUserCart(userId);
 
   return (
     <>
       <SiteHeader />
 
       <main className="min-h-screen bg-[#f7f9fb] px-4 py-6 sm:px-6 lg:px-10">
-        <div className="mx-auto w-full max-w-[1500px]">
+        <div className="mx-auto w-full max-w-375">
           {/* Heading */}
 
           <div className="mb-5 flex items-center gap-2.5">
@@ -55,9 +38,7 @@ export default async function CartPage() {
               aria-label="Back to products"
               className="flex h-8 w-8 items-center justify-center rounded-md text-[#087ff5] transition hover:bg-blue-50"
             >
-              <span className="text-lg">
-                ←
-              </span>
+              <span className="text-lg">←</span>
             </Link>
 
             <div>
@@ -71,8 +52,7 @@ export default async function CartPage() {
             </div>
           </div>
 
-          {cart.items.length ===
-          0 ? (
+          {cart.items.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-white px-6 py-14 text-center">
               <p className="text-sm font-semibold text-gray-800">
                 Your shopping bag is empty
@@ -90,9 +70,7 @@ export default async function CartPage() {
               </Link>
             </div>
           ) : (
-            <CartClient
-              cart={cart}
-            />
+            <CartClient cart={cart} />
           )}
         </div>
       </main>

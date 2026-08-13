@@ -17,7 +17,33 @@ type VariantInput = {
   stock: number;
   colorId: string | null;
   sizeId: string | null;
+  imageUrl: string | null;
+  imagePublicId: string | null;
 };
+
+type ImageInput =
+  | {
+      source: "existing";
+      id: string;
+      position: number;
+      isPrimary: boolean;
+    }
+  | {
+      source: "new";
+      url: string;
+      publicId: string;
+      position: number;
+      isPrimary: boolean;
+    };
+
+class RouteError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function createSlug(value: string) {
   return value
@@ -27,25 +53,16 @@ function createSlug(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-async function getUniqueSlug(
-  name: string,
-  productId: string
-) {
-  const baseSlug =
-    createSlug(name) || "product";
+async function getUniqueSlug(name: string, productId: string) {
+  const baseSlug = createSlug(name) || "product";
 
-  const existing =
-    await prisma.product.findFirst({
-      where: {
-        slug: baseSlug,
-        NOT: {
-          id: productId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+  const existing = await prisma.product.findFirst({
+    where: {
+      slug: baseSlug,
+      NOT: { id: productId },
+    },
+    select: { id: true },
+  });
 
   if (!existing) {
     return baseSlug;
@@ -54,21 +71,15 @@ async function getUniqueSlug(
   let counter = 2;
 
   while (true) {
-    const candidate =
-      `${baseSlug}-${counter}`;
+    const candidate = `${baseSlug}-${counter}`;
 
-    const exists =
-      await prisma.product.findFirst({
-        where: {
-          slug: candidate,
-          NOT: {
-            id: productId,
-          },
-        },
-        select: {
-          id: true,
-        },
-      });
+    const exists = await prisma.product.findFirst({
+      where: {
+        slug: candidate,
+        NOT: { id: productId },
+      },
+      select: { id: true },
+    });
 
     if (!exists) {
       return candidate;
@@ -78,814 +89,556 @@ async function getUniqueSlug(
   }
 }
 
-/*
- * =====================================
- * UPDATE PRODUCT
- * PUT /api/admin/products/[id]
- * =====================================
- */
+async function cleanupCloudinaryImages(publicIds: string[]) {
+  const uniquePublicIds = [...new Set(publicIds.filter(Boolean))];
 
-export async function PUT(
-  request: Request,
-  { params }: RouteContext
-) {
-  try {
-    const admin =
-      await getAdminSession();
+  await Promise.allSettled(
+    uniquePublicIds.map((publicId) =>
+      cloudinary.uploader.destroy(publicId, {
+        resource_type: "image",
+        invalidate: true,
+      }),
+    ),
+  );
+}
 
-    if (!admin) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Admin authentication required.",
-        },
-        {
-          status: 401,
-        }
-      );
+function normalizeImages(value: unknown): ImageInput[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((rawImage, index) => {
+    const source = rawImage?.source;
+
+    const positionValue = Number(rawImage?.position);
+
+    const position =
+      Number.isInteger(positionValue) && positionValue >= 0
+        ? positionValue
+        : index;
+
+    const isPrimary = rawImage?.isPrimary === true;
+
+    if (source === "existing") {
+      const id = typeof rawImage?.id === "string" ? rawImage.id.trim() : "";
+
+      if (!id) {
+        throw new RouteError("Invalid existing product image.");
+      }
+
+      return {
+        source: "existing",
+        id,
+        position,
+        isPrimary,
+      };
     }
 
-    const { id } =
-      await params;
+    if (source === "new") {
+      const url = typeof rawImage?.url === "string" ? rawImage.url.trim() : "";
 
-    if (!id?.trim()) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Product ID is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+      const publicId =
+        typeof rawImage?.publicId === "string" ? rawImage.publicId.trim() : "";
+
+      if (!url || !publicId) {
+        throw new RouteError("Invalid new product image.");
+      }
+
+      return {
+        source: "new",
+        url,
+        publicId,
+        position,
+        isPrimary,
+      };
     }
 
-    const existingProduct =
-      await prisma.product.findUnique({
-        where: {
-          id,
-        },
+    throw new RouteError("Invalid product image information.");
+  });
+}
 
-        include: {
-          images: {
-            orderBy: {
-              position: "asc",
-            },
-          },
+function normalizeVariants(value: unknown): VariantInput[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new RouteError("At least one variant is required.");
+  }
 
-          variants: {
-            select: {
-              id: true,
-              sku: true,
-            },
-          },
-        },
-      });
+  return value.map((rawVariant) => {
+    const id =
+      typeof rawVariant?.id === "string" && rawVariant.id.trim()
+        ? rawVariant.id.trim()
+        : undefined;
 
-    if (!existingProduct) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Product not found.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    const body =
-      await request.json();
-
-    const name =
-      typeof body?.name ===
-      "string"
-        ? body.name.trim()
+    const sku =
+      typeof rawVariant?.sku === "string"
+        ? rawVariant.sku.trim().toUpperCase()
         : "";
 
-    const description =
-      typeof body?.description ===
-      "string"
-        ? body.description.trim()
-        : "";
+    const price = Number(rawVariant?.price);
+    const stock = Number(rawVariant?.stock);
 
-    const categoryId =
-      typeof body?.categoryId ===
-      "string"
-        ? body.categoryId.trim()
-        : "";
+    const colorId =
+      typeof rawVariant?.colorId === "string" && rawVariant.colorId.trim()
+        ? rawVariant.colorId.trim()
+        : null;
+
+    const sizeId =
+      typeof rawVariant?.sizeId === "string" && rawVariant.sizeId.trim()
+        ? rawVariant.sizeId.trim()
+        : null;
 
     const imageUrl =
-      typeof body?.imageUrl ===
-        "string" &&
-      body.imageUrl.trim()
-        ? body.imageUrl.trim()
+      typeof rawVariant?.imageUrl === "string" && rawVariant.imageUrl.trim()
+        ? rawVariant.imageUrl.trim()
         : null;
 
     const imagePublicId =
-      typeof body?.imagePublicId ===
-        "string" &&
-      body.imagePublicId.trim()
-        ? body.imagePublicId.trim()
+      typeof rawVariant?.imagePublicId === "string" &&
+      rawVariant.imagePublicId.trim()
+        ? rawVariant.imagePublicId.trim()
         : null;
 
-    const isActive =
-      body?.isActive !== false;
+    if (!sku) {
+      throw new RouteError("Every variant requires an SKU.");
+    }
 
-    const rawVariants =
-      Array.isArray(
-        body?.variants
-      )
-        ? body.variants
-        : [];
+    if (!Number.isFinite(price) || price < 0) {
+      throw new RouteError(`Invalid price for ${sku}.`);
+    }
+
+    if (!Number.isInteger(stock) || stock < 0) {
+      throw new RouteError(`Invalid stock for ${sku}.`);
+    }
+
+    if (Boolean(imageUrl) !== Boolean(imagePublicId)) {
+      throw new RouteError(`Invalid variant image for ${sku}.`);
+    }
+
+    return {
+      id,
+      sku,
+      price,
+      stock,
+      colorId,
+      sizeId,
+      imageUrl,
+      imagePublicId,
+    };
+  });
+}
+
+export async function PUT(request: Request, { params }: RouteContext) {
+  let newlyUploadedPublicIds: string[] = [];
+
+  try {
+    const admin = await getAdminSession();
+
+    if (!admin) {
+      throw new RouteError("Admin authentication required.", 401);
+    }
+
+    const { id } = await params;
+
+    if (!id?.trim()) {
+      throw new RouteError("Product ID is required.");
+    }
+
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        images: {
+          orderBy: { position: "asc" },
+        },
+        variants: {
+          select: {
+            id: true,
+            sku: true,
+            imageUrl: true,
+            imagePublicId: true,
+          },
+        },
+      },
+    });
+
+    if (!existingProduct) {
+      throw new RouteError("Product not found.", 404);
+    }
+
+    const body = await request.json();
+
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+
+    const description =
+      typeof body?.description === "string" ? body.description.trim() : "";
+
+    const categoryId =
+      typeof body?.categoryId === "string" ? body.categoryId.trim() : "";
+
+    const isActive = body?.isActive !== false;
 
     if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Product name is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+      throw new RouteError("Product name is required.");
     }
 
     if (!categoryId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Category is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+      throw new RouteError("Category is required.");
     }
 
-    if (
-      rawVariants.length === 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "At least one variant is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+    const images = normalizeImages(body?.images);
+    const variants = normalizeVariants(body?.variants);
+
+    /*
+     * Newly-uploaded base product images.
+     */
+    newlyUploadedPublicIds = images
+      .filter(
+        (image): image is Extract<ImageInput, { source: "new" }> =>
+          image.source === "new",
+      )
+      .map((image) => image.publicId);
+
+    const primaryCount = images.filter((image) => image.isPrimary).length;
+
+    if (images.length > 0 && primaryCount !== 1) {
+      throw new RouteError("Select exactly one primary product image.");
     }
 
-    if (
-      (imageUrl &&
-        !imagePublicId) ||
-      (!imageUrl &&
-        imagePublicId)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Invalid image information.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    const category =
-      await prisma.category.findUnique({
-        where: {
-          id: categoryId,
-        },
-
-        select: {
-          id: true,
-        },
-      });
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { id: true },
+    });
 
     if (!category) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Selected category does not exist.",
-        },
-        {
-          status: 400,
-        }
-      );
+      throw new RouteError("Selected category does not exist.");
     }
 
-    const variants:
-      VariantInput[] = [];
+    const skuKeys = variants.map((variant) => variant.sku.toLowerCase());
 
-    for (
-      const rawVariant
-      of rawVariants
-    ) {
-      const variantId =
-        typeof rawVariant?.id ===
-        "string"
-          ? rawVariant.id.trim()
-          : undefined;
+    if (new Set(skuKeys).size !== skuKeys.length) {
+      throw new RouteError("Every variant must have a unique SKU.");
+    }
 
-      const sku =
-        typeof rawVariant?.sku ===
-        "string"
-          ? rawVariant.sku
-              .trim()
-              .toUpperCase()
-          : "";
+    const combinationKeys = variants.map(
+      (variant) => `${variant.colorId ?? "null"}:${variant.sizeId ?? "null"}`,
+    );
 
-      const price =
-        Number(
-          rawVariant?.price
-        );
+    if (new Set(combinationKeys).size !== combinationKeys.length) {
+      throw new RouteError("Duplicate variant combination detected.");
+    }
 
-      const stock =
-        Number(
-          rawVariant?.stock
-        );
+    const existingVariantMap = new Map(
+      existingProduct.variants.map((variant) => [variant.id, variant]),
+    );
 
-      const colorId =
-        typeof rawVariant
-          ?.colorId ===
-          "string" &&
-        rawVariant.colorId.trim()
-          ? rawVariant.colorId.trim()
-          : null;
-
-      const sizeId =
-        typeof rawVariant
-          ?.sizeId ===
-          "string" &&
-        rawVariant.sizeId.trim()
-          ? rawVariant.sizeId.trim()
-          : null;
-
-      if (!sku) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Every variant requires an SKU.",
-          },
-          {
-            status: 400,
-          }
-        );
+    for (const variant of variants) {
+      if (variant.id && !existingVariantMap.has(variant.id)) {
+        throw new RouteError("Invalid product variant.");
       }
+    }
+
+    /*
+     * Determine which submitted variant images are newly uploaded.
+     *
+     * Existing variant:
+     *   same publicId   -> keep
+     *   different ID   -> newly uploaded replacement
+     *
+     * New variant:
+     *   any image ID   -> newly uploaded
+     */
+    for (const variant of variants) {
+      if (!variant.imagePublicId) {
+        continue;
+      }
+
+      if (!variant.id) {
+        newlyUploadedPublicIds.push(variant.imagePublicId);
+        continue;
+      }
+
+      const existingVariant = existingVariantMap.get(variant.id);
 
       if (
-        !Number.isFinite(
-          price
-        ) ||
-        price < 0
+        existingVariant &&
+        existingVariant.imagePublicId !== variant.imagePublicId
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              `Invalid price for ${sku}.`,
-          },
-          {
-            status: 400,
-          }
-        );
+        newlyUploadedPublicIds.push(variant.imagePublicId);
       }
-
-      if (
-        !Number.isInteger(
-          stock
-        ) ||
-        stock < 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              `Invalid stock for ${sku}.`,
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-
-      variants.push({
-        id: variantId,
-        sku,
-        price,
-        stock,
-        colorId,
-        sizeId,
-      });
     }
 
-    /*
-     * Duplicate SKUs in request.
-     */
-    const skuKeys =
-      variants.map(
-        (variant) =>
-          variant.sku
-            .toLowerCase()
-      );
+    newlyUploadedPublicIds = [...new Set(newlyUploadedPublicIds)];
 
-    if (
-      new Set(skuKeys).size !==
-      skuKeys.length
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Every variant must have a unique SKU.",
+    const duplicateSku = await prisma.productVariant.findFirst({
+      where: {
+        sku: {
+          in: variants.map((variant) => variant.sku),
         },
-        {
-          status: 400,
-        }
-      );
+        productId: { not: id },
+      },
+      select: { sku: true },
+    });
+
+    if (duplicateSku) {
+      throw new RouteError(`SKU ${duplicateSku.sku} is already in use.`, 409);
     }
 
-    /*
-     * Duplicate color/size
-     * combinations.
-     */
-    const combinationKeys =
-      variants.map(
-        (variant) =>
-          `${variant.colorId ?? "null"}:${variant.sizeId ?? "null"}`
-      );
-
-    if (
-      new Set(
-        combinationKeys
-      ).size !==
-      combinationKeys.length
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Duplicate variant combination detected.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * Validate colors.
-     */
     const colorIds = [
       ...new Set(
         variants
-          .map(
-            (variant) =>
-              variant.colorId
-          )
-          .filter(
-            (
-              value
-            ): value is string =>
-              value !== null
-          )
+          .map((variant) => variant.colorId)
+          .filter((value): value is string => value !== null),
       ),
     ];
 
-    if (
-      colorIds.length > 0
-    ) {
-      const count =
-        await prisma.color.count({
-          where: {
-            id: {
-              in: colorIds,
-            },
-          },
-        });
-
-      if (
-        count !==
-        colorIds.length
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "One or more colors are invalid.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    }
-
-    /*
-     * Validate sizes.
-     */
-    const sizeIds = [
-      ...new Set(
-        variants
-          .map(
-            (variant) =>
-              variant.sizeId
-          )
-          .filter(
-            (
-              value
-            ): value is string =>
-              value !== null
-          )
-      ),
-    ];
-
-    if (
-      sizeIds.length > 0
-    ) {
-      const count =
-        await prisma.size.count({
-          where: {
-            id: {
-              in: sizeIds,
-            },
-          },
-        });
-
-      if (
-        count !==
-        sizeIds.length
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "One or more sizes are invalid.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    }
-
-    /*
-     * Validate existing variant IDs.
-     *
-     * A client must not send an ID
-     * belonging to another product.
-     */
-    const existingVariantIds =
-      new Set(
-        existingProduct.variants.map(
-          (variant) =>
-            variant.id
-        )
-      );
-
-    for (const variant of variants) {
-      if (
-        variant.id &&
-        !existingVariantIds.has(
-          variant.id
-        )
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Invalid product variant.",
-          },
-          {
-            status: 400,
-          }
-        );
-      }
-    }
-
-    /*
-     * Check SKUs against variants
-     * belonging to OTHER products.
-     */
-    const duplicateSku =
-      await prisma.productVariant.findFirst({
+    if (colorIds.length > 0) {
+      const count = await prisma.color.count({
         where: {
-          sku: {
-            in: variants.map(
-              (variant) =>
-                variant.sku
-            ),
-          },
-
-          productId: {
-            not: id,
-          },
-        },
-
-        select: {
-          sku: true,
+          id: { in: colorIds },
+          isActive: true,
         },
       });
 
-    if (duplicateSku) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            `SKU ${duplicateSku.sku} is already in use.`,
-        },
-        {
-          status: 409,
-        }
-      );
+      if (count !== colorIds.length) {
+        throw new RouteError("One or more colors are invalid or inactive.");
+      }
     }
 
-    const slug =
-      await getUniqueSlug(
-        name,
-        id
+    const sizeIds = [
+      ...new Set(
+        variants
+          .map((variant) => variant.sizeId)
+          .filter((value): value is string => value !== null),
+      ),
+    ];
+
+    if (sizeIds.length > 0) {
+      const count = await prisma.size.count({
+        where: {
+          id: { in: sizeIds },
+          isActive: true,
+        },
+      });
+
+      if (count !== sizeIds.length) {
+        throw new RouteError("One or more sizes are invalid or inactive.");
+      }
+    }
+
+    const existingImageIds = new Set(
+      existingProduct.images.map((image) => image.id),
+    );
+
+    const submittedExistingImageIds = images
+      .filter(
+        (image): image is Extract<ImageInput, { source: "existing" }> =>
+          image.source === "existing",
+      )
+      .map((image) => image.id);
+
+    for (const imageId of submittedExistingImageIds) {
+      if (!existingImageIds.has(imageId)) {
+        throw new RouteError("Invalid existing product image.");
+      }
+    }
+
+    const removedImages = existingProduct.images.filter(
+      (image) => !submittedExistingImageIds.includes(image.id),
+    );
+
+    const submittedExistingVariantIds = variants
+      .filter(
+        (
+          variant,
+        ): variant is VariantInput & {
+          id: string;
+        } => Boolean(variant.id),
+      )
+      .map((variant) => variant.id);
+
+    const removedVariants = existingProduct.variants.filter(
+      (variant) => !submittedExistingVariantIds.includes(variant.id),
+    );
+
+    const removedVariantIds = removedVariants.map((variant) => variant.id);
+
+    /*
+     * Existing variant images that should be deleted from Cloudinary
+     * AFTER the DB update succeeds.
+     *
+     * This includes:
+     * - image explicitly removed
+     * - image replaced
+     * - whole variant removed
+     */
+    const oldVariantImagePublicIdsToDelete: string[] = [];
+
+    for (const existingVariant of existingProduct.variants) {
+      if (!existingVariant.imagePublicId) {
+        continue;
+      }
+
+      const submittedVariant = variants.find(
+        (variant) => variant.id === existingVariant.id,
       );
 
-    const submittedExistingIds =
-      variants
-        .filter(
-          (
-            variant
-          ): variant is VariantInput & {
-            id: string;
-          } =>
-            Boolean(
-              variant.id
-            )
-        )
-        .map(
-          (variant) =>
-            variant.id
-        );
+      if (!submittedVariant) {
+        oldVariantImagePublicIdsToDelete.push(existingVariant.imagePublicId);
+        continue;
+      }
 
-    const removedVariantIds =
-      existingProduct.variants
-        .map(
-          (variant) =>
-            variant.id
-        )
-        .filter(
-          (variantId) =>
-            !submittedExistingIds.includes(
-              variantId
-            )
-        );
+      if (submittedVariant.imagePublicId !== existingVariant.imagePublicId) {
+        oldVariantImagePublicIdsToDelete.push(existingVariant.imagePublicId);
+      }
+    }
 
-    /*
-     * Remember old image so we
-     * can remove it from Cloudinary
-     * AFTER DB update succeeds.
-     */
-    const oldPrimaryImage =
-      existingProduct.images.find(
-        (image) =>
-          image.isPrimary
-      ) ??
-      existingProduct.images[0] ??
-      null;
+    const slug = await getUniqueSlug(name, id);
 
-    const oldPublicId =
-      oldPrimaryImage?.publicId ??
-      null;
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          name,
+          slug,
+          description: description || null,
+          categoryId,
+          isActive,
+        },
+      });
 
-    const imageChanged =
-      oldPublicId !==
-      imagePublicId;
-
-    /*
-     * =================================
-     * DATABASE TRANSACTION
-     * =================================
-     */
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.product.update({
+      if (removedVariantIds.length > 0) {
+        await tx.cartItem.deleteMany({
           where: {
-            id,
-          },
-
-          data: {
-            name,
-            slug,
-            description:
-              description || null,
-            categoryId,
-            isActive,
+            variantId: {
+              in: removedVariantIds,
+            },
           },
         });
 
-        /*
-         * Remove variants deleted
-         * by admin.
-         *
-         * Cart items referencing them
-         * are removed first.
-         */
-        if (
-          removedVariantIds.length >
-          0
-        ) {
-          await tx.cartItem.deleteMany({
-            where: {
-              variantId: {
-                in:
-                  removedVariantIds,
-              },
-            },
-          });
+        await tx.productVariant.deleteMany({
+          where: {
+            id: { in: removedVariantIds },
+            productId: id,
+          },
+        });
+      }
 
-          await tx.productVariant.deleteMany({
-            where: {
-              id: {
-                in:
-                  removedVariantIds,
-              },
-
-              productId: id,
-            },
-          });
-        }
-
-        /*
-         * Update or create variants.
-         */
-        for (
-          const variant
-          of variants
-        ) {
-          if (variant.id) {
-            await tx.productVariant.update({
-              where: {
-                id:
-                  variant.id,
-              },
-
-              data: {
-                sku:
-                  variant.sku,
-
-                price:
-                  variant.price,
-
-                stock:
-                  variant.stock,
-
-                colorId:
-                  variant.colorId,
-
-                sizeId:
-                  variant.sizeId,
-
-                isActive,
-              },
-            });
-          } else {
-            await tx.productVariant.create({
-              data: {
-                productId: id,
-
-                sku:
-                  variant.sku,
-
-                price:
-                  variant.price,
-
-                stock:
-                  variant.stock,
-
-                colorId:
-                  variant.colorId,
-
-                sizeId:
-                  variant.sizeId,
-
-                isActive,
-              },
-            });
-          }
-        }
-
-        /*
-         * Replace product image
-         * metadata.
-         */
-        if (imageChanged) {
-          await tx.productImage.deleteMany({
-            where: {
-              productId: id,
-            },
-          });
-
-          if (
-            imageUrl &&
-            imagePublicId
-          ) {
-            await tx.productImage.create({
-              data: {
-                productId: id,
-                url:
-                  imageUrl,
-                publicId:
-                  imagePublicId,
-                altText:
-                  name,
-                isPrimary:
-                  true,
-                position: 0,
-              },
-            });
-          }
-        } else {
-          /*
-           * Keep image but update alt text.
-           */
-          await tx.productImage.updateMany({
-            where: {
-              productId: id,
-            },
-
+      for (const variant of variants) {
+        if (variant.id) {
+          await tx.productVariant.update({
+            where: { id: variant.id },
             data: {
-              altText:
-                name,
+              sku: variant.sku,
+              price: variant.price,
+              stock: variant.stock,
+              colorId: variant.colorId,
+              sizeId: variant.sizeId,
+              imageUrl: variant.imageUrl,
+              imagePublicId: variant.imagePublicId,
+              isActive,
+            },
+          });
+        } else {
+          await tx.productVariant.create({
+            data: {
+              productId: id,
+              sku: variant.sku,
+              price: variant.price,
+              stock: variant.stock,
+              colorId: variant.colorId,
+              sizeId: variant.sizeId,
+              imageUrl: variant.imageUrl,
+              imagePublicId: variant.imagePublicId,
+              isActive,
             },
           });
         }
       }
-    );
+
+      if (removedImages.length > 0) {
+        await tx.productImage.deleteMany({
+          where: {
+            id: {
+              in: removedImages.map((image) => image.id),
+            },
+            productId: id,
+          },
+        });
+      }
+
+      for (const image of images) {
+        if (image.source === "existing") {
+          await tx.productImage.update({
+            where: { id: image.id },
+            data: {
+              altText: name,
+              position: image.position,
+              isPrimary: image.isPrimary,
+            },
+          });
+        } else {
+          await tx.productImage.create({
+            data: {
+              productId: id,
+              url: image.url,
+              publicId: image.publicId,
+              altText: name,
+              position: image.position,
+              isPrimary: image.isPrimary,
+            },
+          });
+        }
+      }
+    });
 
     /*
-     * =================================
-     * CLOUDINARY CLEANUP
-     * =================================
-     *
-     * DB update already succeeded.
-     * Now remove replaced old image.
+     * DB update succeeded.
+     * Newly uploaded images are now in use, so never clean them in catch.
      */
-    if (
-      imageChanged &&
-      oldPublicId &&
-      oldPublicId !==
-        imagePublicId
-    ) {
-      try {
-        await cloudinary.uploader.destroy(
-          oldPublicId,
-          {
-            resource_type:
-              "image",
-            invalidate: true,
-          }
-        );
-      } catch (error) {
-        /*
-         * Product update should stay
-         * successful even if CDN cleanup
-         * fails temporarily.
-         */
-        console.error(
-          "Old Cloudinary image cleanup failed:",
-          error
-        );
-      }
+    newlyUploadedPublicIds = [];
+
+    const removedBaseImagePublicIds = removedImages
+      .map((image) => image.publicId)
+      .filter((value): value is string => Boolean(value));
+
+    const oldPublicIdsToDelete = [
+      ...removedBaseImagePublicIds,
+      ...oldVariantImagePublicIdsToDelete,
+    ];
+
+    if (oldPublicIdsToDelete.length > 0) {
+      await cleanupCloudinaryImages(oldPublicIdsToDelete);
     }
 
     return NextResponse.json({
       success: true,
-      message:
-        "Product updated successfully.",
+      message: "Product updated successfully.",
     });
   } catch (error) {
-    console.error(
-      "Admin update product error:",
-      error
-    );
+    /*
+     * Only clean files that were newly uploaded during THIS submit.
+     * Existing product/variant images must never be deleted here.
+     */
+    if (newlyUploadedPublicIds.length > 0) {
+      await cleanupCloudinaryImages(newlyUploadedPublicIds);
+    }
+
+    if (error instanceof RouteError) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: error.message,
+        },
+        { status: error.status },
+      );
+    }
+
+    console.error("Admin update product error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          "Something went wrong while updating the product.",
+        message: "Something went wrong while updating the product.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 },
     );
   }
 }
@@ -896,92 +649,120 @@ export async function PUT(
  * =====================================
  */
 
-export async function DELETE(
-  _request: Request,
-  { params }: RouteContext
-) {
+export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
-    /*
-     * Admin protection.
-     *
-     * Customer Auth.js login does
-     * not give access here.
-     */
-    const admin =
-      await getAdminSession();
+    const admin = await getAdminSession();
 
     if (!admin) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Admin authentication required.",
+          message: "Admin authentication required.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
-    const { id } =
-      await params;
+    const { id } = await params;
 
     if (!id?.trim()) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Product ID is required.",
+          message: "Product ID is required.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
     /*
-     * Make sure product exists.
-     *
-     * Also load Cloudinary IDs
-     * in case hard delete occurs.
+     * Load both:
+     * - base ProductImage Cloudinary IDs
+     * - per-variant Cloudinary IDs
      */
-    const product =
-      await prisma.product.findUnique({
-        where: {
-          id,
-        },
+    const product = await prisma.product.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        name: true,
 
-        select: {
-          id: true,
-          name: true,
-
-          images: {
-            select: {
-              publicId: true,
-            },
+        images: {
+          select: {
+            publicId: true,
           },
         },
-      });
+
+        variants: {
+          select: {
+            imagePublicId: true,
+          },
+        },
+      },
+    });
 
     if (!product) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Product not found.",
+          message: "Product not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
     /*
-     * Check whether any variant
-     * exists in historical OrderItems.
+     * Keep products that already belong to order history.
      */
-    const historicalOrderItems =
-      await prisma.orderItem.count({
+    const historicalOrderItems = await prisma.orderItem.count({
+      where: {
+        variant: {
+          productId: id,
+        },
+      },
+    });
+
+    if (historicalOrderItems > 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.product.update({
+          where: {
+            id,
+          },
+          data: {
+            isActive: false,
+          },
+        });
+
+        await tx.productVariant.updateMany({
+          where: {
+            productId: id,
+          },
+          data: {
+            isActive: false,
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        action: "deactivated",
+        message: `${product.name} has previous orders, so it was deactivated instead of permanently deleted.`,
+      });
+    }
+
+    /*
+     * Product has no historical order items:
+     * hard delete database records.
+     */
+    await prisma.$transaction(async (tx) => {
+      await tx.cartItem.deleteMany({
         where: {
           variant: {
             productId: id,
@@ -989,139 +770,58 @@ export async function DELETE(
         },
       });
 
-    /*
-     * CASE 1:
-     * Product has previous orders.
-     *
-     * Keep database/history and
-     * Cloudinary image.
-     */
-    if (
-      historicalOrderItems > 0
-    ) {
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.product.update({
-            where: {
-              id,
-            },
-
-            data: {
-              isActive: false,
-            },
-          });
-
-          await tx.productVariant.updateMany({
-            where: {
-              productId: id,
-            },
-
-            data: {
-              isActive: false,
-            },
-          });
-        }
-      );
-
-      return NextResponse.json({
-        success: true,
-
-        action:
-          "deactivated",
-
-        message:
-          `${product.name} has previous orders, so it was deactivated instead of permanently deleted.`,
+      await tx.productImage.deleteMany({
+        where: {
+          productId: id,
+        },
       });
-    }
+
+      await tx.productVariant.deleteMany({
+        where: {
+          productId: id,
+        },
+      });
+
+      await tx.product.delete({
+        where: {
+          id,
+        },
+      });
+    });
 
     /*
-     * CASE 2:
-     * Never ordered.
-     *
-     * Hard delete DB data.
+     * Only after DB succeeds, remove Cloudinary assets.
      */
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.cartItem.deleteMany({
-          where: {
-            variant: {
-              productId: id,
-            },
-          },
-        });
+    const publicIds = [
+      ...product.images
+        .map((image) => image.publicId)
+        .filter((value): value is string => Boolean(value)),
 
-        await tx.productImage.deleteMany({
-          where: {
-            productId: id,
-          },
-        });
+      ...product.variants
+        .map((variant) => variant.imagePublicId)
+        .filter((value): value is string => Boolean(value)),
+    ];
 
-        await tx.productVariant.deleteMany({
-          where: {
-            productId: id,
-          },
-        });
-
-        await tx.product.delete({
-          where: {
-            id,
-          },
-        });
-      }
-    );
-
-    /*
-     * Delete actual Cloudinary
-     * images after DB succeeds.
-     */
-    for (
-      const image
-      of product.images
-    ) {
-      if (!image.publicId) {
-        continue;
-      }
-
-      try {
-        await cloudinary.uploader.destroy(
-          image.publicId,
-          {
-            resource_type:
-              "image",
-            invalidate: true,
-          }
-        );
-      } catch (error) {
-        console.error(
-          `Cloudinary cleanup failed for ${image.publicId}:`,
-          error
-        );
-      }
+    if (publicIds.length > 0) {
+      await cleanupCloudinaryImages(publicIds);
     }
 
     return NextResponse.json({
       success: true,
-
       action: "deleted",
-
-      message:
-        `${product.name} deleted successfully.`,
+      message: `${product.name} deleted successfully.`,
     });
   } catch (error) {
-    console.error(
-      "Admin delete product error:",
-      error
-    );
+    console.error("Admin delete product error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          "Something went wrong while deleting the product.",
+        message: "Something went wrong while deleting the product.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

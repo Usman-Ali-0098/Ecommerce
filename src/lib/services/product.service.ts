@@ -79,7 +79,6 @@ export async function getPublicProducts({
             {
               name: {
                 contains: search,
-
                 mode: "insensitive",
               },
             },
@@ -87,7 +86,6 @@ export async function getPublicProducts({
             {
               description: {
                 contains: search,
-
                 mode: "insensitive",
               },
             },
@@ -97,8 +95,9 @@ export async function getPublicProducts({
   };
 
   /*
-   * Newest / Oldest can be
-   * sorted directly by Prisma.
+   * --------------------------------
+   * NEWEST / OLDEST
+   * --------------------------------
    */
   if (sort === "newest" || sort === "oldest") {
     const orderBy: Prisma.ProductOrderByWithRelationInput = {
@@ -108,7 +107,9 @@ export async function getPublicProducts({
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
+
         orderBy,
+
         skip,
 
         take: safePageSize,
@@ -137,18 +138,9 @@ export async function getPublicProducts({
   }
 
   /*
-   * Product price lives on
-   * ProductVariant.
-   *
-   * Prisma cannot simply order
-   * Product rows by the minimum
-   * price of a one-to-many
-   * variants relation.
-   *
-   * Therefore for price sorting
-   * we load matching products,
-   * calculate minPrice, sort,
-   * then paginate.
+   * --------------------------------
+   * PRICE SORTING
+   * --------------------------------
    */
   const products = await prisma.product.findMany({
     where,
@@ -185,11 +177,33 @@ export async function getPublicProducts({
   };
 }
 
+/*
+ * --------------------------------
+ * MAP PUBLIC PRODUCT
+ * --------------------------------
+ */
 function mapPublicProduct(product: ProductWithRelations) {
+  /*
+   * Find primary image.
+   */
   const primaryImage =
     product.images.find((image) => image.isPrimary) ??
     product.images[0] ??
     null;
+
+  /*
+   * Primary image always first.
+   *
+   * This makes index 0 the
+   * default card image.
+   */
+  const orderedImages = primaryImage
+    ? [
+        primaryImage,
+
+        ...product.images.filter((image) => image.id !== primaryImage.id),
+      ]
+    : [];
 
   const variants = product.variants.map((variant) => ({
     id: variant.id,
@@ -199,6 +213,10 @@ function mapPublicProduct(product: ProductWithRelations) {
     price: Number(variant.price),
 
     stock: variant.stock,
+
+    imageUrl: variant.imageUrl,
+
+    imagePublicId: variant.imagePublicId,
 
     color: variant.color
       ? {
@@ -229,6 +247,7 @@ function mapPublicProduct(product: ProductWithRelations) {
 
   const totalStock = variants.reduce(
     (total, variant) => total + variant.stock,
+
     0,
   );
 
@@ -249,6 +268,12 @@ function mapPublicProduct(product: ProductWithRelations) {
       slug: product.category.slug,
     },
 
+    /*
+     * Keep existing primary image.
+     *
+     * This keeps old components
+     * compatible with product.image.
+     */
     image: primaryImage
       ? {
           id: primaryImage.id,
@@ -256,13 +281,35 @@ function mapPublicProduct(product: ProductWithRelations) {
           url: primaryImage.url,
 
           altText: primaryImage.altText ?? product.name,
+
+          isPrimary: primaryImage.isPrimary,
+
+          position: primaryImage.position,
         }
       : null,
+
+    /*
+     * NEW:
+     * full image gallery.
+     */
+    images: orderedImages.map((image) => ({
+      id: image.id,
+
+      url: image.url,
+
+      altText: image.altText ?? product.name,
+
+      isPrimary: image.isPrimary,
+
+      position: image.position,
+    })),
 
     variants,
 
     minPrice,
+
     maxPrice,
+
     totalStock,
   };
 }

@@ -1,25 +1,32 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
 
-const ONE_HOUR = 60 * 60 ;
+const ONE_HOUR = 60 * 60;
 
-const DEFAULT_SESSION_MAX_AGE =
-  12 * ONE_HOUR;
+const DEFAULT_SESSION_MAX_AGE = 24 * ONE_HOUR;
 
-const REMEMBER_SESSION_MAX_AGE =
-  48 * ONE_HOUR;
+const REMEMBER_SESSION_MAX_AGE = 48 * ONE_HOUR;
 
-export const {
-  handlers,
-  auth,
-  signIn,
-  signOut,
-} = NextAuth({
+export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
+    /*
+     * Google OAuth for customer
+     * authentication.
+     */
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID!,
+
+      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+    }),
+
+    /*
+     * Credentials authentication.
+     */
     Credentials({
       credentials: {
         email: {
@@ -39,157 +46,301 @@ export const {
       },
 
       async authorize(credentials) {
-        /*
-         * Validate only the fields
-         * required by loginSchema.
-         */
-        const result =
-          loginSchema.safeParse({
-            email:
-              credentials?.email,
+        const result = loginSchema.safeParse({
+          email: credentials?.email,
 
-            password:
-              credentials?.password,
-          });
+          password: credentials?.password,
+        });
 
         if (!result.success) {
           return null;
         }
 
-        const {
-          email,
-          password,
-        } = result.data;
+        const { email, password } = result.data;
+
+        const rememberMe = credentials?.rememberMe === "true";
 
         /*
-         * signIn() sends this as
-         * "true" or "false".
+         * Credentials login works
+         * directly against User.
          */
-        const rememberMe =
-          credentials?.rememberMe ===
-          "true";
-
-        const user =
-          await prisma.user.findUnique({
-            where: {
-              email,
-            },
-          });
+        const user = await prisma.user.findUnique({
+          where: {
+            email,
+          },
+        });
 
         if (!user) {
           return null;
         }
 
-        const passwordMatches =
-          await bcrypt.compare(
-            password,
-            user.password
-          );
+        /*
+         * Google-only customers may
+         * legitimately have no local
+         * password.
+         */
+        if (!user.password) {
+          return null;
+        }
+
+        /*
+         * Customer Auth.js must not
+         * authenticate ADMIN accounts.
+         */
+        if (user.role !== "USER") {
+          return null;
+        }
+
+        const passwordMatches = await bcrypt.compare(password, user.password);
 
         if (!passwordMatches) {
           return null;
         }
 
         return {
-          id:
-            user.id.toString(),
-
-          email:
-            user.email,
-
-          fullName:
-            user.fullName,
-
-          role:
-            user.role,
-
+          id: user.id.toString(),
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role,
           rememberMe,
         };
       },
     }),
   ],
 
-  /*
-   * Auth.js uses JWT sessions.
-   *
-   * 48 hours is the maximum
-   * Auth.js session lifetime.
-   *
-   * Our custom sessionExpiresAt
-   * controls whether this login
-   * is actually valid for
-   * 24 or 48 hours.
-   */
   session: {
     strategy: "jwt",
-    maxAge:
-      REMEMBER_SESSION_MAX_AGE,
+    maxAge: REMEMBER_SESSION_MAX_AGE,
   },
 
   jwt: {
-    maxAge:
-      REMEMBER_SESSION_MAX_AGE,
+    maxAge: REMEMBER_SESSION_MAX_AGE,
   },
 
   callbacks: {
-    async jwt({
-      token,
-      user,
-    }) {
+    async signIn({ user, account, profile }) {
       /*
-       * Initial successful login.
-       *
-       * `user` exists here when
-       * credentials are accepted.
+       * Credentials authentication was
+       * already handled by authorize().
        */
-      if (user) {
-        token.id =
-          user.id;
+      if (account?.provider !== "google") {
+        return true;
+      }
 
-        token.role =
-          user.role;
+      const email = user.email?.trim().toLowerCase();
 
-        token.fullName =
-          user.fullName;
+      const googleAccountId =
+        typeof profile?.sub === "string" ? profile.sub : null;
 
-        const rememberMe =
-          Boolean(
-            user.rememberMe
-          );
+      if (!email || !googleAccountId) {
+        return false;
+      }
 
-        token.rememberMe =
-          rememberMe;
+      /*
+       * Require Google's verified
+       * email claim.
+       */
+      const emailVerified =
+        profile &&
+        "email_verified" in profile &&
+        profile.email_verified === true;
 
-        const maxAge =
-          rememberMe
-            ? REMEMBER_SESSION_MAX_AGE
-            : DEFAULT_SESSION_MAX_AGE;
+      if (!emailVerified) {
+        return false;
+      }
+
+      /*
+       * CASE 1
+       *
+       * Google account already exists.
+       */
+      const existingGoogleAccount = await prisma.account.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider: "google",
+
+            providerAccountId: googleAccountId,
+          },
+        },
+
+        include: {
+          user: true,
+        },
+      });
+
+      if (existingGoogleAccount) {
+        /*
+         * Never authenticate ADMIN
+         * through customer Google OAuth.
+         */
+        if (existingGoogleAccount.user.role !== "USER") {
+          return false;
+        }
+
+        return true;
+      }
+
+      /*
+       * CASE 2
+       *
+       * Existing credentials customer
+       * uses Google for the first time.
+       */
+      const existingUser = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
+
+      if (existingUser) {
+        if (existingUser.role !== "USER") {
+          return false;
+        }
 
         /*
-         * Fixed application-level
-         * expiry:
-         *
-         * unchecked = 24 hours
-         * checked   = 48 hours
+         * Link Google account to the
+         * existing customer.
          */
-        token.sessionExpiresAt =
-          Date.now() +
-          maxAge * 1000;
+        await prisma.account.create({
+          data: {
+            userId: existingUser.id,
+
+            type: "oauth",
+
+            provider: "google",
+
+            providerAccountId: googleAccountId,
+          },
+        });
+
+        return true;
+      }
+
+      /*
+       * CASE 3
+       *
+       * Completely new Google customer.
+       */
+      const fullName = user.name?.trim() || "Customer";
+
+      /*
+       * Create both records together.
+       *
+       * If Account creation fails,
+       * User creation is rolled back.
+       */
+      await prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            fullName,
+
+            email,
+
+            mobile: null,
+
+            password: null,
+
+            role: "USER",
+          },
+        });
+
+        await tx.account.create({
+          data: {
+            userId: newUser.id,
+
+            type: "oauth",
+
+            provider: "google",
+
+            providerAccountId: googleAccountId,
+          },
+        });
+      });
+
+      return true;
+    },
+
+    async jwt({ token, user, account, profile }) {
+      /*
+       * Initial Google login.
+       */
+      if (account?.provider === "google") {
+        const googleAccountId =
+          typeof profile?.sub === "string" ? profile.sub : null;
+
+        if (!googleAccountId) {
+          return null;
+        }
+
+        /*
+         * Google
+         *    ↓
+         * Account
+         *    ↓
+         * User
+         */
+        const databaseAccount = await prisma.account.findUnique({
+          where: {
+            provider_providerAccountId: {
+              provider: "google",
+
+              providerAccountId: googleAccountId,
+            },
+          },
+
+          include: {
+            user: true,
+          },
+        });
+
+        if (!databaseAccount || databaseAccount.user.role !== "USER") {
+          return null;
+        }
+
+        const databaseUser = databaseAccount.user;
+
+        token.id = databaseUser.id.toString();
+
+        token.role = "USER";
+
+        token.fullName = databaseUser.fullName;
+
+        token.rememberMe = false;
+
+        token.sessionExpiresAt = Date.now() + DEFAULT_SESSION_MAX_AGE * 1000;
 
         return token;
       }
 
       /*
-       * Existing session.
-       *
-       * If our fixed expiry has
-       * passed, invalidate the JWT.
+       * Initial credentials login.
+       */
+      if (user) {
+        token.id = user.id;
+
+        token.role = user.role;
+
+        token.fullName = user.fullName;
+
+        const rememberMe = Boolean(user.rememberMe);
+
+        token.rememberMe = rememberMe;
+
+        const maxAge = rememberMe
+          ? REMEMBER_SESSION_MAX_AGE
+          : DEFAULT_SESSION_MAX_AGE;
+
+        token.sessionExpiresAt = Date.now() + maxAge * 1000;
+
+        return token;
+      }
+
+      /*
+       * Existing JWT.
        */
       if (
-        typeof token.sessionExpiresAt ===
-          "number" &&
-        Date.now() >=
-          token.sessionExpiresAt
+        typeof token.sessionExpiresAt === "number" &&
+        Date.now() >= token.sessionExpiresAt
       ) {
         return null;
       }
@@ -197,50 +348,21 @@ export const {
       return token;
     },
 
-    async session({
-      session,
-      token,
-    }) {
+    async session({ session, token }) {
       if (session.user) {
-        /*
-         * Avoid unsafe casts and
-         * satisfy TypeScript.
-         */
-        if (
-          typeof token.id ===
-          "string"
-        ) {
-          session.user.id =
-            token.id;
+        if (typeof token.id === "string") {
+          session.user.id = token.id;
         }
 
-        if (
-          token.role ===
-            "USER" ||
-          token.role ===
-            "ADMIN"
-        ) {
-          session.user.role =
-            token.role;
+        if (token.role === "USER" || token.role === "ADMIN") {
+          session.user.role = token.role;
         }
 
-        if (
-          typeof token.fullName ===
-          "string"
-        ) {
-          session.user.fullName =
-            token.fullName;
+        if (typeof token.fullName === "string") {
+          session.user.fullName = token.fullName;
         }
       }
 
-      /*
-       * Do NOT manually assign
-       * session.expires here.
-       *
-       * Auth.js manages that field.
-       * Our custom fixed expiry is
-       * stored in the JWT instead.
-       */
       return session;
     },
   },
