@@ -18,6 +18,10 @@ import {
   useRouter,
 } from "next/navigation";
 
+import {
+  signOut,
+} from "next-auth/react";
+
 import Image from "next/image"
 
 type AdminHeaderProps = {
@@ -587,21 +591,6 @@ export default function AdminHeader({
         true
       );
 
-      const response =
-        await fetch(
-          "/api/admin/logout",
-          {
-            method:
-              "POST",
-          }
-        );
-
-      if (
-        !response.ok
-      ) {
-        return;
-      }
-
       setProfileOpen(
         false
       );
@@ -609,6 +598,10 @@ export default function AdminHeader({
       setNotificationOpen(
         false
       );
+
+      await signOut({
+        redirect: false,
+      });
 
       router.replace(
         "/login"

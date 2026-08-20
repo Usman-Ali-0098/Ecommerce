@@ -1,179 +1,167 @@
 import { prisma } from "@/lib/prisma";
 
+const TAX_RATE = 0.1;
+
+const DEFAULT_PAGE_SIZE = 20;
+
+const MAX_PAGE_SIZE = 100;
+
+type OrderServiceErrorCode =
+  | "INVALID_CART_ITEMS"
+  | "PRODUCT_UNAVAILABLE"
+  | "INVALID_QUANTITY"
+  | "INSUFFICIENT_STOCK"
+  | "CART_CHANGED";
+
+export class OrderServiceError extends Error {
+  code: OrderServiceErrorCode;
+
+  constructor(code: OrderServiceErrorCode, message: string) {
+    super(message);
+
+    this.name = "OrderServiceError";
+
+    this.code = code;
+  }
+}
+
 type GetUserOrdersParams = {
   userId: number;
   page?: number;
   pageSize?: number;
 };
 
+type CreateOrderParams = {
+  userId: number;
+  cartItemIds: string[];
+};
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function createOrderNumber() {
+  const timestamp = Date.now().toString().slice(-8);
+
+  const random = Math.floor(1000 + Math.random() * 9000);
+
+  return `ORD-${timestamp}-${random}`;
+}
+
 export async function getUserOrders({
   userId,
   page = 1,
-  pageSize = 20,
+  pageSize = DEFAULT_PAGE_SIZE,
 }: GetUserOrdersParams) {
-  const safePage =
-    Math.max(
-      page,
-      1
-    );
+  const safePage = Math.max(page, 1);
 
-  const safePageSize =
-    Math.min(
-      Math.max(
-        pageSize,
-        1
-      ),
-      100
-    );
+  const safePageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
 
-  const skip =
-    (safePage - 1) *
-    safePageSize;
+  const skip = (safePage - 1) * safePageSize;
 
-  const [orders, total] =
-    await Promise.all([
-      prisma.order.findMany({
-        where: {
-          userId,
-        },
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        userId,
+      },
 
-        orderBy: {
-          createdAt:
-            "desc",
-        },
+      orderBy: {
+        createdAt: "desc",
+      },
 
-        skip,
+      skip,
 
-        take:
-          safePageSize,
+      take: safePageSize,
 
-        include: {
-          items: {
-            select: {
-              quantity:
-                true,
-            },
+      include: {
+        items: {
+          select: {
+            quantity: true,
           },
         },
-      }),
+      },
+    }),
 
-      prisma.order.count({
-        where: {
-          userId,
-        },
-      }),
-    ]);
+    prisma.order.count({
+      where: {
+        userId,
+      },
+    }),
+  ]);
 
   return {
-    orders:
-      orders.map(
-        (order) => {
-          const productCount =
-            order.items.reduce(
-              (
-                sum,
-                item
-              ) =>
-                sum +
-                item.quantity,
-              0
-            );
+    orders: orders.map((order) => {
+      const productCount = order.items.reduce(
+        (sum, item) => sum + item.quantity,
+        0,
+      );
 
-          return {
-            id:
-              order.id,
+      return {
+        id: order.id,
 
-            orderNumber:
-              order.orderNumber,
+        orderNumber: order.orderNumber,
 
-            status:
-              order.status,
+        status: order.status,
 
-            createdAt:
-              order.createdAt,
+        createdAt: order.createdAt,
 
-            subtotal:
-              Number(
-                order.subtotal
-              ),
+        subtotal: Number(order.subtotal),
 
-            tax:
-              Number(
-                order.tax
-              ),
+        tax: Number(order.tax),
 
-            total:
-              Number(
-                order.total
-              ),
+        total: Number(order.total),
 
-            productCount,
-          };
-        }
-      ),
+        productCount,
+      };
+    }),
 
     pagination: {
-      page:
-        safePage,
+      page: safePage,
 
-      pageSize:
-        safePageSize,
+      pageSize: safePageSize,
 
       total,
 
-      totalPages:
-        Math.ceil(
-          total /
-            safePageSize
-        ),
+      totalPages: Math.ceil(total / safePageSize),
     },
   };
 }
 
-export async function getUserOrderById(
-  userId: number,
-  orderId: string
-) {
-  const order =
-    await prisma.order.findFirst({
-      where: {
-        id: orderId,
-        userId,
+export async function getUserOrderById(userId: number, orderId: string) {
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      userId,
+    },
+
+    include: {
+      user: {
+        select: {
+          fullName: true,
+        },
       },
 
-      include: {
-        user: {
-          select: {
-            fullName:
-              true,
-          },
+      items: {
+        orderBy: {
+          createdAt: "asc",
         },
 
-        items: {
-          orderBy: {
-            createdAt:
-              "asc",
-          },
+        include: {
+          variant: {
+            include: {
+              product: {
+                include: {
+                  images: {
+                    orderBy: [
+                      {
+                        isPrimary: "desc",
+                      },
+                      {
+                        position: "asc",
+                      },
+                    ],
 
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: {
-                    images: {
-                      orderBy: [
-                        {
-                          isPrimary:
-                            "desc",
-                        },
-                        {
-                          position:
-                            "asc",
-                        },
-                      ],
-
-                      take: 1,
-                    },
+                    take: 1,
                   },
                 },
               },
@@ -181,114 +169,295 @@ export async function getUserOrderById(
           },
         },
       },
-    });
+    },
+  });
 
   if (!order) {
     return null;
   }
 
-  const productCount =
-    order.items.reduce(
-      (
-        sum,
-        item
-      ) =>
-        sum +
-        item.quantity,
-      0
-    );
+  const productCount = order.items.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
 
   return {
-    id:
-      order.id,
+    id: order.id,
 
-    orderNumber:
-      order.orderNumber,
+    orderNumber: order.orderNumber,
 
-    status:
-      order.status,
+    status: order.status,
 
-    createdAt:
-      order.createdAt,
+    createdAt: order.createdAt,
 
     user: {
-      fullName:
-        order.user
-          .fullName,
+      fullName: order.user.fullName,
     },
 
-    subtotal:
-      Number(
-        order.subtotal
-      ),
+    subtotal: Number(order.subtotal),
 
-    tax:
-      Number(
-        order.tax
-      ),
+    tax: Number(order.tax),
 
-    total:
-      Number(
-        order.total
-      ),
+    total: Number(order.total),
 
     productCount,
 
-    /*
-     * Historical values still come
-     * from OrderItem snapshots.
-     *
-     * Only the image is read from
-     * the current Product relation.
-     */
-    items:
-      order.items.map(
-        (item) => {
-          const image =
-            item.variant
-              ?.product
-              .images[0];
+    items: order.items.map((item) => {
+      const image = item.variant?.product.images[0];
 
-          return {
-            id:
-              item.id,
+      return {
+        id: item.id,
 
-            productName:
-              item.productName,
+        productName: item.productName,
 
-            sku:
-              item.sku,
+        sku: item.sku,
 
-            colorName:
-              item.colorName,
+        colorName: item.colorName,
 
-            sizeName:
-              item.sizeName,
+        sizeName: item.sizeName,
 
-            unitPrice:
-              Number(
-                item.unitPrice
-              ),
+        unitPrice: Number(item.unitPrice),
 
-            quantity:
-              item.quantity,
+        quantity: item.quantity,
 
-            lineTotal:
-              Number(
-                item.lineTotal
-              ),
+        lineTotal: Number(item.lineTotal),
 
-            image: image
-              ? {
-                  url:
-                    image.url,
+        image: image
+          ? {
+              url: image.url,
 
-                  altText:
-                    image.altText,
-                }
-              : null,
-          };
-        }
+              altText: image.altText,
+            }
+          : null,
+      };
+    }),
+  };
+}
+
+export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
+  const orderNumber = createOrderNumber();
+
+  const order = await prisma.$transaction(async (tx) => {
+    const cartItems = await tx.cartItem.findMany({
+      where: {
+        id: {
+          in: cartItemIds,
+        },
+
+        cart: {
+          userId,
+        },
+      },
+
+      include: {
+        variant: {
+          include: {
+            color: true,
+            size: true,
+
+            product: {
+              include: {
+                category: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (cartItems.length !== cartItemIds.length) {
+      throw new OrderServiceError(
+        "INVALID_CART_ITEMS",
+        "One or more selected cart items are invalid.",
+      );
+    }
+
+    for (const item of cartItems) {
+      const variant = item.variant;
+
+      const product = variant.product;
+
+      if (
+        !variant.isActive ||
+        !product.isActive ||
+        !product.category.isActive
+      ) {
+        throw new OrderServiceError(
+          "PRODUCT_UNAVAILABLE",
+          `${product.name} is currently unavailable.`,
+        );
+      }
+
+      if (item.quantity < 1) {
+        throw new OrderServiceError(
+          "INVALID_QUANTITY",
+          `Invalid quantity for ${product.name}.`,
+        );
+      }
+
+      if (variant.stock < item.quantity) {
+        throw new OrderServiceError(
+          "INSUFFICIENT_STOCK",
+          variant.stock === 0
+            ? `${product.name} is out of stock.`
+            : `Only ${variant.stock} item(s) of ${product.name} are available.`,
+        );
+      }
+    }
+
+    const subtotal = roundMoney(
+      cartItems.reduce(
+        (sum, item) => sum + Number(item.variant.price) * item.quantity,
+        0,
       ),
+    );
+
+    const tax = roundMoney(subtotal * TAX_RATE);
+
+    const total = roundMoney(subtotal + tax);
+
+    for (const item of cartItems) {
+      const stockUpdate = await tx.productVariant.updateMany({
+        where: {
+          id: item.variantId,
+
+          isActive: true,
+
+          stock: {
+            gte: item.quantity,
+          },
+
+          product: {
+            isActive: true,
+
+            category: {
+              isActive: true,
+            },
+          },
+        },
+
+        data: {
+          stock: {
+            decrement: item.quantity,
+          },
+        },
+      });
+
+      if (stockUpdate.count !== 1) {
+        throw new OrderServiceError(
+          "INSUFFICIENT_STOCK",
+          `${item.variant.product.name} no longer has enough stock. Please review your cart and try again.`,
+        );
+      }
+    }
+
+    const newOrder = await tx.order.create({
+      data: {
+        orderNumber,
+
+        userId,
+
+        status: "PENDING",
+
+        subtotal,
+
+        tax,
+
+        total,
+      },
+    });
+
+    await tx.orderItem.createMany({
+      data: cartItems.map((item) => {
+        const variant = item.variant;
+
+        const product = variant.product;
+
+        const unitPrice = Number(variant.price);
+
+        return {
+          orderId: newOrder.id,
+
+          variantId: variant.id,
+
+          productName: product.name,
+
+          sku: variant.sku,
+
+          colorName: variant.color?.name ?? null,
+
+          sizeName: variant.size?.name ?? null,
+
+          unitPrice,
+
+          quantity: item.quantity,
+
+          lineTotal: roundMoney(unitPrice * item.quantity),
+        };
+      }),
+    });
+
+    await tx.notification.create({
+      data: {
+        userId,
+
+        orderId: newOrder.id,
+
+        type: "ORDER_PLACED",
+
+        title: "Order Placed Successfully",
+
+        message: `Your order ${newOrder.orderNumber} has been placed successfully.`,
+      },
+    });
+
+    await tx.adminNotification.create({
+      data: {
+        orderId: newOrder.id,
+
+        type: "NEW_ORDER",
+
+        title: "New Order Placed",
+
+        message: `A customer placed order ${newOrder.orderNumber} for Rs. ${Number(
+          newOrder.total,
+        ).toLocaleString("en-PK")}.`,
+      },
+    });
+
+    const deleted = await tx.cartItem.deleteMany({
+      where: {
+        id: {
+          in: cartItemIds,
+        },
+
+        cart: {
+          userId,
+        },
+      },
+    });
+
+    if (deleted.count !== cartItemIds.length) {
+      throw new OrderServiceError(
+        "CART_CHANGED",
+        "Your cart changed while placing the order. Please refresh your cart and try again.",
+      );
+    }
+
+    return newOrder;
+  });
+
+  return {
+    id: order.id,
+
+    orderNumber: order.orderNumber,
+
+    status: order.status,
+
+    subtotal: Number(order.subtotal),
+
+    tax: Number(order.tax),
+
+    total: Number(order.total),
   };
 }

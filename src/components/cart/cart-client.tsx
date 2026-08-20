@@ -12,6 +12,8 @@ import CartSummary from "@/components/cart/cart-summary";
 import CartTable from "@/components/cart/cart-table";
 import DeleteCartItemModal from "@/components/cart/delete-cart-item-modal";
 
+import OrderSuccessModal from "@/components/orders/order-success-modal";
+
 import { notifyCartUpdated } from "@/lib/cart-events";
 
 import { notifyNotificationUpdated } from "@/lib/notification-events";
@@ -20,6 +22,26 @@ import type { CartData } from "@/types/cart";
 
 type CartClientProps = {
   cart: CartData;
+};
+
+type PlaceOrderResponse = {
+  success: boolean;
+
+  message?: string;
+
+  data?: {
+    id: string;
+
+    orderNumber: string;
+
+    status: string;
+
+    subtotal: number;
+
+    tax: number;
+
+    total: number;
+  };
 };
 
 export default function CartClient({ cart }: CartClientProps) {
@@ -39,6 +61,16 @@ export default function CartClient({ cart }: CartClientProps) {
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
+  //ORDER SUCCESS
+
+  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
+
+  const [placedOrderNumber, setPlacedOrderNumber] = useState<string | null>(
+    null,
+  );
+
+  // SELECTED CART ITEMS
+
   const selectedItems = useMemo(
     () => cart.items.filter((item) => selectedItemIds.includes(item.id)),
     [cart.items, selectedItemIds],
@@ -51,6 +83,8 @@ export default function CartClient({ cart }: CartClientProps) {
 
   const allSelected =
     cart.items.length > 0 && selectedItemIds.length === cart.items.length;
+
+  // SELECTION
 
   function toggleItem(itemId: string) {
     setSelectedItemIds((current) => {
@@ -71,6 +105,8 @@ export default function CartClient({ cart }: CartClientProps) {
 
     setSelectedItemIds(cart.items.map((item) => item.id));
   }
+
+  // UPDATE QUANTITY
 
   async function updateQuantity(itemId: string, quantity: number) {
     if (quantity < 1) {
@@ -119,6 +155,8 @@ export default function CartClient({ cart }: CartClientProps) {
       setUpdatingItemId(null);
     }
   }
+
+  // DELETE CART ITEM
 
   function requestDelete(itemId: string) {
     setItemPendingDelete(itemId);
@@ -178,9 +216,13 @@ export default function CartClient({ cart }: CartClientProps) {
     }
   }
 
+  // / PLACE ORDER
+
   async function placeOrder() {
     if (selectedItemIds.length === 0) {
-      showAlert("Please select at least one product.", { variant: "warning" });
+      showAlert("Please select at least one product.", {
+        variant: "warning",
+      });
 
       return;
     }
@@ -200,9 +242,12 @@ export default function CartClient({ cart }: CartClientProps) {
         }),
       });
 
-      if (!response.ok) {
-        const result = await response.json();
+      /*
+       * Read response once.
+       */
+      const result = (await response.json()) as PlaceOrderResponse;
 
+      if (!response.ok || !result.success || !result.data) {
         showAlert(result.message ?? "Unable to place order.", {
           variant: "error",
         });
@@ -210,21 +255,24 @@ export default function CartClient({ cart }: CartClientProps) {
         return;
       }
 
-      const result = await response.json();
+      //ORDER SUCCESS
 
-      showAlert(result.message ?? "Order placed successfully.", {
-        variant: "success",
-      });
+      setPlacedOrderId(result.data.id);
+
+      setPlacedOrderNumber(result.data.orderNumber);
 
       setSelectedItemIds([]);
+
+      /*
+       * Update header/cart/notification
+       * UI after successful checkout.
+       */
 
       notifyCartUpdated();
 
       notifyNotificationUpdated();
 
       router.refresh();
-
-      router.push("/orders");
     } catch (error) {
       console.error("Place order request error:", error);
 
@@ -234,6 +282,20 @@ export default function CartClient({ cart }: CartClientProps) {
     } finally {
       setIsPlacingOrder(false);
     }
+  }
+
+  //SUCCESS MODAL NAVIGATION
+
+  function viewPlacedOrder() {
+    if (!placedOrderId) {
+      return;
+    }
+
+    router.push(`/orders/${placedOrderId}`);
+  }
+
+  function returnHome() {
+    router.push("/");
   }
 
   return (
@@ -262,6 +324,15 @@ export default function CartClient({ cart }: CartClientProps) {
         isDeleting={deletingItemId !== null}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+
+      {/* Order Success Modal */}
+
+      <OrderSuccessModal
+        open={placedOrderId !== null}
+        orderNumber={placedOrderNumber}
+        onViewOrder={viewPlacedOrder}
+        onReturnHome={returnHome}
       />
 
       {alert ? (

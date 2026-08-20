@@ -47,18 +47,13 @@ export async function getUserCart(userId: number) {
     const product = item.variant.product;
 
     const primaryImage =
-      product.images.find(
-        (image) => image.isPrimary
-      ) ??
+      product.images.find((image) => image.isPrimary) ??
       product.images[0] ??
       null;
 
-    const unitPrice = Number(
-      item.variant.price
-    );
+    const unitPrice = Number(item.variant.price);
 
-    const lineTotal =
-      unitPrice * item.quantity;
+    const lineTotal = unitPrice * item.quantity;
 
     return {
       id: item.id,
@@ -95,9 +90,7 @@ export async function getUserCart(userId: number) {
           ? {
               url: primaryImage.url,
 
-              altText:
-                primaryImage.altText ??
-                product.name,
+              altText: primaryImage.altText ?? product.name,
             }
           : null,
       },
@@ -106,17 +99,9 @@ export async function getUserCart(userId: number) {
     };
   });
 
-  const subtotal = items.reduce(
-    (total, item) =>
-      total + item.lineTotal,
-    0
-  );
+  const subtotal = items.reduce((total, item) => total + item.lineTotal, 0);
 
-  const totalItems = items.reduce(
-    (total, item) =>
-      total + item.quantity,
-    0
-  );
+  const totalItems = items.reduce((total, item) => total + item.quantity, 0);
 
   return {
     id: cart.id,
@@ -126,34 +111,15 @@ export async function getUserCart(userId: number) {
   };
 }
 
-/*
- * Used by the header.
- *
- * Important:
- * We calculate SUM(quantity),
- * not number of CartItem rows.
- *
- * Example:
- * Shirt qty 3
- * Charger qty 2
- *
- * cart count = 5
- */
-export async function getCartCount(
-  userId: number
-) {
-  const result =
-    await prisma.cartItem.aggregate({
-      where: {
-        cart: {
-          userId,
-        },
+// Used by the header.
+export async function getCartCount(userId: number) {
+  const count = await prisma.cartItem.count({
+    where: {
+      cart: {
+        userId,
       },
+    },
+  });
 
-      _sum: {
-        quantity: true,
-      },
-    });
-
-  return result._sum.quantity ?? 0;
+  return count;
 }

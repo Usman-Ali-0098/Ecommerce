@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 import { notifyNotificationUpdated } from "@/lib/notification-events";
@@ -28,9 +23,7 @@ type NotificationItem = {
 type NotificationDropdownProps = {
   open: boolean;
   onClose: () => void;
-  onUnreadCountChange: (
-    count: number
-  ) => void;
+  onUnreadCountChange: (count: number) => void;
 };
 
 export default function NotificationDropdown({
@@ -40,293 +33,194 @@ export default function NotificationDropdown({
 }: NotificationDropdownProps) {
   const router = useRouter();
 
-  const [
-    notifications,
-    setNotifications,
-  ] = useState<NotificationItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  const [
-    nextCursor,
-    setNextCursor,
-  ] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
-  const [hasMore, setHasMore] =
-    useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
-  const [
-    isInitialLoading,
-    setIsInitialLoading,
-  ] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
 
-  const [
-    isLoadingMore,
-    setIsLoadingMore,
-  ] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const [
-    isMarkingAll,
-    setIsMarkingAll,
-  ] = useState(false);
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
 
-  const observerRef =
-    useRef<IntersectionObserver | null>(
-      null
-    );
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
-  const loadInitialNotifications =
-    useCallback(async () => {
+  const loadInitialNotifications = useCallback(
+    async (signal?: AbortSignal) => {
       try {
         setIsInitialLoading(true);
 
-        const response = await fetch(
-          "/api/notifications?limit=10",
-          {
-            cache: "no-store",
-          }
-        );
+        const response = await fetch("/api/notifications?limit=10", {
+          cache: "no-store",
+          signal,
+        });
 
-        const result =
-          await response.json();
+        const result = await response.json();
 
         if (!response.ok) {
           return;
         }
 
-        setNotifications(
-          result.data.notifications
-        );
+        setNotifications(result.data.notifications);
 
-        setNextCursor(
-          result.data.nextCursor
-        );
+        setNextCursor(result.data.nextCursor);
 
-        setHasMore(
-          result.data.hasMore
-        );
+        setHasMore(result.data.hasMore);
 
-        onUnreadCountChange(
-          result.data.unreadCount
-        );
+        onUnreadCountChange(result.data.unreadCount);
       } catch (error) {
-        console.error(
-          "Load notifications error:",
-          error
-        );
-      } finally {
-        setIsInitialLoading(false);
-      }
-    }, [onUnreadCountChange]);
+        /*
+         * Closing the dropdown can
+         * intentionally cancel the request.
+         */
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
 
-  const loadMore =
-    useCallback(async () => {
-      if (
-        !nextCursor ||
-        !hasMore ||
-        isLoadingMore
-      ) {
+        console.error("Load notifications error:", error);
+      } finally {
+        if (!signal?.aborted) {
+          setIsInitialLoading(false);
+        }
+      }
+    },
+    [onUnreadCountChange],
+  );
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || !hasMore || isLoadingMore) {
+      return;
+    }
+
+    try {
+      setIsLoadingMore(true);
+
+      const response = await fetch(
+        `/api/notifications?cursor=${encodeURIComponent(nextCursor)}&limit=10`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
         return;
       }
 
-      try {
-        setIsLoadingMore(true);
+      setNotifications((current) => {
+        const existingIds = new Set(current.map((item) => item.id));
 
-        const response = await fetch(
-          `/api/notifications?cursor=${encodeURIComponent(
-            nextCursor
-          )}&limit=10`,
-          {
-            cache: "no-store",
-          }
+        const newItems = result.data.notifications.filter(
+          (item: NotificationItem) => !existingIds.has(item.id),
         );
 
-        const result =
-          await response.json();
+        return [...current, ...newItems];
+      });
 
-        if (!response.ok) {
-          return;
-        }
+      setNextCursor(result.data.nextCursor);
 
-        setNotifications(
-          (current) => {
-            const existingIds =
-              new Set(
-                current.map(
-                  (item) =>
-                    item.id
-                )
-              );
+      setHasMore(result.data.hasMore);
 
-            const newItems =
-              result.data.notifications.filter(
-                (
-                  item: NotificationItem
-                ) =>
-                  !existingIds.has(
-                    item.id
-                  )
-              );
-
-            return [
-              ...current,
-              ...newItems,
-            ];
-          }
-        );
-
-        setNextCursor(
-          result.data.nextCursor
-        );
-
-        setHasMore(
-          result.data.hasMore
-        );
-
-        onUnreadCountChange(
-          result.data.unreadCount
-        );
-      } catch (error) {
-        console.error(
-          "Load more notifications error:",
-          error
-        );
-      } finally {
-        setIsLoadingMore(false);
-      }
-    }, [
-      nextCursor,
-      hasMore,
-      isLoadingMore,
-      onUnreadCountChange,
-    ]);
+      onUnreadCountChange(result.data.unreadCount);
+    } catch (error) {
+      console.error("Load more notifications error:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [nextCursor, hasMore, isLoadingMore, onUnreadCountChange]);
 
   useEffect(() => {
-    if (open) {
-      loadInitialNotifications();
+    if (!open) {
+      return;
     }
-  }, [
-    open,
-    loadInitialNotifications,
-  ]);
 
-  const bottomRef =
-    useCallback(
-      (
-        node: HTMLDivElement | null
-      ) => {
-        if (
-          isInitialLoading ||
-          isLoadingMore
-        ) {
-          return;
-        }
+    const controller = new AbortController();
 
-        if (
-          observerRef.current
-        ) {
-          observerRef.current.disconnect();
-        }
+    const timeoutId = window.setTimeout(() => {
+      void loadInitialNotifications(controller.signal);
+    }, 0);
 
-        observerRef.current =
-          new IntersectionObserver(
-            (entries) => {
-              if (
-                entries[0]
-                  ?.isIntersecting &&
-                hasMore
-              ) {
-                loadMore();
-              }
-            },
-            {
-              rootMargin:
-                "80px",
-            }
-          );
+    return () => {
+      window.clearTimeout(timeoutId);
 
-        if (node) {
-          observerRef.current.observe(
-            node
-          );
-        }
-      },
-      [
-        hasMore,
-        isInitialLoading,
-        isLoadingMore,
-        loadMore,
-      ]
-    );
+      controller.abort();
+    };
+  }, [open, loadInitialNotifications]);
 
-  async function markOneRead(
-    notification:
-      NotificationItem
-  ) {
+  const bottomRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (isInitialLoading || isLoadingMore) {
+        return;
+      }
+
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting && hasMore) {
+            loadMore();
+          }
+        },
+        {
+          rootMargin: "80px",
+        },
+      );
+
+      if (node) {
+        observerRef.current.observe(node);
+      }
+    },
+    [hasMore, isInitialLoading, isLoadingMore, loadMore],
+  );
+
+  async function markOneRead(notification: NotificationItem) {
     if (!notification.isRead) {
       try {
-        const response =
-          await fetch(
-            "/api/notifications",
-            {
-              method:
-                "PATCH",
+        const response = await fetch("/api/notifications", {
+          method: "PATCH",
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-              body: JSON.stringify(
-                {
-                  action:
-                    "markOneRead",
+          body: JSON.stringify({
+            action: "markOneRead",
 
-                  notificationId:
-                    notification.id,
-                }
-              ),
-            }
-          );
+            notificationId: notification.id,
+          }),
+        });
 
-        const result =
-          await response.json();
+        const result = await response.json();
 
         if (response.ok) {
-          setNotifications(
-            (current) =>
-              current.map(
-                (item) =>
-                  item.id ===
-                  notification.id
-                    ? {
-                        ...item,
-                        isRead:
-                          true,
-                      }
-                    : item
-              )
+          setNotifications((current) =>
+            current.map((item) =>
+              item.id === notification.id
+                ? {
+                    ...item,
+                    isRead: true,
+                  }
+                : item,
+            ),
           );
 
-          onUnreadCountChange(
-            result.data.unreadCount
-          );
-           notifyNotificationUpdated();
+          onUnreadCountChange(result.data.unreadCount);
+          notifyNotificationUpdated();
         }
       } catch (error) {
-        console.error(
-          "Mark notification read error:",
-          error
-        );
+        console.error("Mark notification read error:", error);
       }
     }
 
     onClose();
 
-    if (
-      notification.orderId
-    ) {
-      router.push(
-        `/orders/${notification.orderId}`
-      );
+    if (notification.orderId) {
+      router.push(`/orders/${notification.orderId}`);
     }
   }
 
@@ -334,52 +228,35 @@ export default function NotificationDropdown({
     try {
       setIsMarkingAll(true);
 
-      const response =
-        await fetch(
-          "/api/notifications",
-          {
-            method: "PATCH",
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body: JSON.stringify(
-              {
-                action:
-                  "markAllRead",
-              }
-            ),
-          }
-        );
+        body: JSON.stringify({
+          action: "markAllRead",
+        }),
+      });
 
-      const result =
-        await response.json();
+      const result = await response.json();
 
       if (!response.ok) {
         return;
       }
 
-      setNotifications(
-        (current) =>
-          current.map(
-            (item) => ({
-              ...item,
-              isRead: true,
-            })
-          )
+      setNotifications((current) =>
+        current.map((item) => ({
+          ...item,
+          isRead: true,
+        })),
       );
 
-      onUnreadCountChange(
-        result.data.unreadCount
-      );
-       notifyNotificationUpdated();
+      onUnreadCountChange(result.data.unreadCount);
+      notifyNotificationUpdated();
     } catch (error) {
-      console.error(
-        "Mark all notifications read error:",
-        error
-      );
+      console.error("Mark all notifications read error:", error);
     } finally {
       setIsMarkingAll(false);
     }
@@ -390,14 +267,16 @@ export default function NotificationDropdown({
   }
 
   return (
-    <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+    <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-90 max-w-[calc(100vw-20px)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+      {/* Header */}
+
+      <div className="flex items-center justify-between border-b border-gray-200 px-3.5 py-2.5">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">
+          <h3 className="text-[13px] font-semibold text-gray-900">
             Notifications
           </h3>
 
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-[10px] text-gray-400">
             Your recent updates
           </p>
         </div>
@@ -405,144 +284,107 @@ export default function NotificationDropdown({
         <button
           type="button"
           onClick={markAllRead}
-          disabled={
-            isMarkingAll
-          }
-          className="text-xs font-medium text-[#087ff5] transition hover:text-[#066ed6] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isMarkingAll}
+          className="text-[10px] font-medium text-[#087ff5] transition hover:text-[#066ed6] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isMarkingAll
-            ? "Updating..."
-            : "Mark all as read"}
+          {isMarkingAll ? "Updating..." : "Mark all as read"}
         </button>
       </div>
 
-      <div className="max-h-[520px] overflow-y-auto">
+      {/* Notifications */}
+
+      <div className="max-h-110 overflow-y-auto bg-gray-50/60 p-2">
         {isInitialLoading ? (
           <NotificationLoading />
-        ) : notifications.length ===
-          0 ? (
-          <div className="px-5 py-12 text-center">
-            <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+        ) : notifications.length === 0 ? (
+          <div className="rounded-md border border-gray-200 bg-white px-4 py-9 text-center">
+            <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-400">
               <BellIcon />
             </div>
 
-            <p className="text-sm font-medium text-gray-700">
+            <p className="text-xs font-medium text-gray-700">
               No notifications yet
             </p>
 
-            <p className="mt-1 text-xs text-gray-400">
-              Order updates will
-              appear here.
+            <p className="mt-1 text-[10px] text-gray-400">
+              Order updates will appear here.
             </p>
           </div>
         ) : (
-          <>
-            {notifications.map(
-              (notification) => (
-                <button
-                  key={
-                    notification.id
-                  }
-                  type="button"
-                  onClick={() =>
-                    markOneRead(
-                      notification
-                    )
-                  }
-                  className={`flex w-full gap-3 border-b border-gray-100 px-4 py-4 text-left transition hover:bg-gray-50 ${
-                    !notification.isRead
-                      ? "bg-blue-50/60"
-                      : "bg-white"
-                  }`}
-                >
-                  <NotificationIcon
-                    type={
-                      notification.type
-                    }
-                  />
+          <div className="space-y-1.5">
+            {notifications.map((notification) => (
+              <button
+                key={notification.id}
+                type="button"
+                onClick={() => markOneRead(notification)}
+                className={`flex w-full items-start gap-2.5 rounded-md border px-3 py-2.5 text-left transition ${
+                  !notification.isRead
+                    ? "border-blue-100 bg-blue-50/70 hover:border-blue-200 hover:bg-blue-50"
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                <NotificationIcon type={notification.type} />
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="truncate text-sm font-medium text-gray-900">
-                        {
-                          notification.title
-                        }
-                      </p>
-
-                      {!notification.isRead ? (
-                        <span
-                          className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#087ff5]"
-                          aria-label="Unread"
-                        />
-                      ) : null}
-                    </div>
-
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">
-                      {
-                        notification.message
-                      }
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-[11px] font-semibold text-gray-800">
+                      {notification.title}
                     </p>
 
-                    <p className="mt-2 text-[11px] text-gray-400">
-                      {formatRelativeTime(
-                        notification.createdAt
-                      )}
-                    </p>
+                    {!notification.isRead ? (
+                      <span
+                        className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#087ff5]"
+                        aria-label="Unread"
+                      />
+                    ) : null}
                   </div>
 
-                  {notification.orderId ? (
-                    <span className="mt-1 shrink-0 text-gray-400">
-                      →
-                    </span>
-                  ) : null}
-                </button>
-              )
-            )}
+                  <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-gray-500">
+                    {notification.message}
+                  </p>
 
-            <div
-              ref={bottomRef}
-              className="min-h-1"
-            />
+                  <p className="mt-1.5 text-[9px] text-gray-400">
+                    {formatRelativeTime(notification.createdAt)}
+                  </p>
+                </div>
+
+                {notification.orderId ? (
+                  <span className="mt-0.5 shrink-0 text-[11px] text-gray-300">
+                    →
+                  </span>
+                ) : null}
+              </button>
+            ))}
+
+            <div ref={bottomRef} className="min-h-1" />
 
             {isLoadingMore ? (
-              <div className="px-4 py-4 text-center text-xs text-gray-400">
-                Loading older
-                notifications...
+              <div className="py-2 text-center text-[10px] text-gray-400">
+                Loading older notifications...
               </div>
             ) : null}
 
-            {!hasMore &&
-            notifications.length >
-              0 ? (
-              <div className="px-4 py-4 text-center text-xs text-gray-400">
-                You&apos;ve reached
-                the end.
+            {!hasMore && notifications.length > 0 ? (
+              <div className="py-2 text-center text-[9px] text-gray-400">
+                You&apos;ve reached the end.
               </div>
             ) : null}
-          </>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function NotificationIcon({
-  type,
-}: {
-  type: NotificationItem["type"];
-}) {
+function NotificationIcon({ type }: { type: NotificationItem["type"] }) {
   const symbol =
-    type ===
-      "ORDER_DELIVERED"
+    type === "ORDER_DELIVERED"
       ? "✓"
-      : type ===
-          "ORDER_CANCELLED"
+      : type === "ORDER_CANCELLED"
         ? "×"
-        : type ===
-            "ORDER_SHIPPED"
+        : type === "ORDER_SHIPPED"
           ? "↗"
-          : type ===
-              "ORDER_PROCESSING"
+          : type === "ORDER_PROCESSING"
             ? "…"
             : "✓";
 
@@ -559,10 +401,7 @@ function NotificationLoading() {
       {Array.from({
         length: 5,
       }).map((_, index) => (
-        <div
-          key={index}
-          className="flex gap-3 px-2 py-3"
-        >
+        <div key={index} className="flex gap-3 px-2 py-3">
           <div className="h-9 w-9 animate-pulse rounded-full bg-gray-100" />
 
           <div className="flex-1">
@@ -596,62 +435,40 @@ function BellIcon() {
   );
 }
 
-function formatRelativeTime(
-  value: string
-) {
-  const createdAt =
-    new Date(value);
+function formatRelativeTime(value: string) {
+  const createdAt = new Date(value);
 
   const now = new Date();
 
-  const diffMs =
-    now.getTime() -
-    createdAt.getTime();
+  const diffMs = now.getTime() - createdAt.getTime();
 
-  const seconds =
-    Math.floor(
-      diffMs / 1000
-    );
+  const seconds = Math.floor(diffMs / 1000);
 
   if (seconds < 60) {
     return "Just now";
   }
 
-  const minutes =
-    Math.floor(
-      seconds / 60
-    );
+  const minutes = Math.floor(seconds / 60);
 
   if (minutes < 60) {
     return `${minutes} min ago`;
   }
 
-  const hours =
-    Math.floor(
-      minutes / 60
-    );
+  const hours = Math.floor(minutes / 60);
 
   if (hours < 24) {
     return `${hours} hr ago`;
   }
 
-  const days =
-    Math.floor(
-      hours / 24
-    );
+  const days = Math.floor(hours / 24);
 
   if (days < 7) {
-    return `${days} day${
-      days > 1 ? "s" : ""
-    } ago`;
+    return `${days} day${days > 1 ? "s" : ""} ago`;
   }
 
-  return new Intl.DateTimeFormat(
-    "en-GB",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }
-  ).format(createdAt);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(createdAt);
 }

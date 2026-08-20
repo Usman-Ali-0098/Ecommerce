@@ -18,8 +18,8 @@ export default function DeleteCartItemModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4">
-      <div className="relative w-full max-w-[360px] rounded-lg bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/30 px-4">
+      <div className="relative w-full max-w-90 rounded-lg bg-white p-6 shadow-xl">
         {/* Close button */}
         <button
           type="button"
@@ -44,7 +44,7 @@ export default function DeleteCartItemModal({
             Remove Product?
           </h2>
 
-          <p className="mx-auto mt-2 max-w-[260px] text-sm leading-5 text-gray-500">
+          <p className="mx-auto mt-2 max-w-65 text-sm leading-5 text-gray-500">
             Are you sure you want to remove this product from your cart?
           </p>
         </div>
@@ -64,11 +64,9 @@ export default function DeleteCartItemModal({
             type="button"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="h-9 min-w-[84px] rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-9 min-w-21 rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isDeleting
-              ? "Removing..."
-              : "Remove"}
+            {isDeleting ? "Removing..." : "Remove"}
           </button>
         </div>
       </div>

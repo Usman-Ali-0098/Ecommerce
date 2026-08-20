@@ -39,17 +39,7 @@ const navigation = [
   },
 ];
 
-/*
- * --------------------------------
- * FETCH CART COUNT
- * --------------------------------
- *
- * Important:
- * This function only fetches and
- * returns data.
- *
- * It does NOT update React state.
- */
+// FETCH CART COUNT
 
 async function fetchCartCount() {
   const response = await fetch("/api/cart/count", {
@@ -65,11 +55,7 @@ async function fetchCartCount() {
   return Number(result.count) || 0;
 }
 
-/*
- * --------------------------------
- * FETCH NOTIFICATION COUNT
- * --------------------------------
- */
+// FETCH NOTIFICATION COUNT
 
 async function fetchNotificationCount() {
   const response = await fetch("/api/notifications?limit=1", {
@@ -92,11 +78,7 @@ export default function SiteHeader() {
 
   const pathname = usePathname();
 
-  /*
-   * --------------------------------
-   * DROPDOWN STATE
-   * --------------------------------
-   */
+  // DROPDOWN STATE
 
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -104,21 +86,13 @@ export default function SiteHeader() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  /*
-   * --------------------------------
-   * COUNTER STATE
-   * --------------------------------
-   */
+  // COUNTER STATE
 
   const [cartCount, setCartCount] = useState(0);
 
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
-  /*
-   * --------------------------------
-   * REFS
-   * --------------------------------
-   */
+  // REFS
 
   const accountRef = useRef<HTMLDivElement | null>(null);
 
@@ -165,11 +139,7 @@ export default function SiteHeader() {
     };
   }, [status]);
 
-  /*
-   * --------------------------------
-   * CART UPDATED EVENT
-   * --------------------------------
-   */
+  // CART UPDATED EVENT
 
   useEffect(() => {
     function handleCartUpdated() {
@@ -193,11 +163,7 @@ export default function SiteHeader() {
     };
   }, [status]);
 
-  /*
-   * --------------------------------
-   * NOTIFICATION UPDATED EVENT
-   * --------------------------------
-   */
+  // NOTIFICATION UPDATED EVENT
 
   useEffect(() => {
     function handleNotificationUpdated() {
@@ -487,17 +453,6 @@ export default function SiteHeader() {
                       <Package size={14} />
                       My Orders
                     </Link>
-
-                    {/* Admin Login */}
-
-                    <button
-                      type="button"
-                      onClick={() => void handleAdminLogin()}
-                      className="mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-gray-600 transition hover:bg-blue-50 hover:text-blue-600"
-                    >
-                      <UserRound size={14} />
-                      Admin Login
-                    </button>
 
                     {/* Logout */}
 

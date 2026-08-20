@@ -19,45 +19,36 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "You must be logged in to view notifications.",
+          message: "You must be logged in to view notifications.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
-    const userId = Number(
-      session.user.id
-    );
+    const userId = Number(session.user.id);
 
     if (!Number.isInteger(userId)) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid user session.",
+          message: "Invalid user session.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
     const url = new URL(request.url);
 
-    const cursor =
-      url.searchParams.get("cursor") ??
-      undefined;
+    const cursor = url.searchParams.get("cursor") ?? undefined;
 
-    const rawLimit = Number(
-      url.searchParams.get("limit")
-    );
+    const rawLimit = Number(url.searchParams.get("limit"));
 
     const limit =
-      Number.isInteger(rawLimit) &&
-      rawLimit > 0
+      Number.isInteger(rawLimit) && rawLimit > 0
         ? Math.min(rawLimit, 50)
         : DEFAULT_LIMIT;
 
@@ -67,59 +58,45 @@ export async function GET(request: Request) {
      * 1. notifications
      * 2. current unread counter
      */
-    const [
-      notificationResult,
-      unreadCount,
-    ] = await Promise.all([
+    const [notificationResult, unreadCount] = await Promise.all([
       getUserNotifications({
         userId,
         cursor,
         limit,
       }),
 
-      getUnreadNotificationCount(
-        userId
-      ),
+      getUnreadNotificationCount(userId),
     ]);
 
     return NextResponse.json({
       success: true,
 
       data: {
-        notifications:
-          notificationResult.notifications,
+        notifications: notificationResult.notifications,
 
-        nextCursor:
-          notificationResult.nextCursor,
+        nextCursor: notificationResult.nextCursor,
 
-        hasMore:
-          notificationResult.hasMore,
+        hasMore: notificationResult.hasMore,
 
         unreadCount,
       },
     });
   } catch (error) {
-    console.error(
-      "Get notifications error:",
-      error
-    );
+    console.error("Get notifications error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          "Unable to load notifications.",
+        message: "Unable to load notifications.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }
 
-export async function PATCH(
-  request: Request
-) {
+export async function PATCH(request: Request) {
   try {
     const session = await auth();
 
@@ -127,70 +104,54 @@ export async function PATCH(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "You must be logged in.",
+          message: "You must be logged in.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
-    const userId = Number(
-      session.user.id
-    );
+    const userId = Number(session.user.id);
 
     if (!Number.isInteger(userId)) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid user session.",
+          message: "Invalid user session.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
-    const action =
-      body?.action;
+    const action = body?.action;
 
     /*
      * MARK ONE NOTIFICATION READ
      */
-    if (
-      action === "markOneRead"
-    ) {
-      const notificationId =
-        body?.notificationId;
+    if (action === "markOneRead") {
+      const notificationId = body?.notificationId;
 
       if (
-        typeof notificationId !==
-          "string" ||
-        notificationId.trim()
-          .length === 0
+        typeof notificationId !== "string" ||
+        notificationId.trim().length === 0
       ) {
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Notification ID is required.",
+            message: "Notification ID is required.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      const notification =
-        await markNotificationAsRead(
-          userId,
-          notificationId
-        );
+      const notification = await markNotificationAsRead(userId, notificationId);
 
       /*
        * findFirst in service verifies
@@ -201,29 +162,23 @@ export async function PATCH(
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Notification not found.",
+            message: "Notification not found.",
           },
           {
             status: 404,
-          }
+          },
         );
       }
 
-      const unreadCount =
-        await getUnreadNotificationCount(
-          userId
-        );
+      const unreadCount = await getUnreadNotificationCount(userId);
 
       return NextResponse.json({
         success: true,
 
-        message:
-          "Notification marked as read.",
+        message: "Notification marked as read.",
 
         data: {
-          notificationId:
-            notification.id,
+          notificationId: notification.id,
 
           unreadCount,
         },
@@ -233,23 +188,16 @@ export async function PATCH(
     /*
      * MARK ALL NOTIFICATIONS READ
      */
-    if (
-      action === "markAllRead"
-    ) {
-      const result =
-        await markAllNotificationsAsRead(
-          userId
-        );
+    if (action === "markAllRead") {
+      const result = await markAllNotificationsAsRead(userId);
 
       return NextResponse.json({
         success: true,
 
-        message:
-          "All notifications marked as read.",
+        message: "All notifications marked as read.",
 
         data: {
-          updatedCount:
-            result.count,
+          updatedCount: result.count,
 
           unreadCount: 0,
         },
@@ -263,29 +211,24 @@ export async function PATCH(
       {
         success: false,
 
-        message:
-          "Invalid notification action.",
+        message: "Invalid notification action.",
       },
       {
         status: 400,
-      }
+      },
     );
   } catch (error) {
-    console.error(
-      "Update notification error:",
-      error
-    );
+    console.error("Update notification error:", error);
 
     return NextResponse.json(
       {
         success: false,
 
-        message:
-          "Unable to update notification.",
+        message: "Unable to update notification.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

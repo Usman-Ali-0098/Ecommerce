@@ -25,7 +25,7 @@ export async function POST(request: Request) {
           message: "Validation failed",
           errors: result.error.flatten().fieldErrors,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -63,13 +63,10 @@ export async function POST(request: Request) {
     const rawToken = randomBytes(32).toString("hex");
 
     // 7. Hash the token before storing it
-    const tokenHash = createHash("sha256")
-      .update(rawToken)
-      .digest("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 
     // 8. Make the token expire after one minute
-    const expiresAt = new Date(Date.now() + 60 * 1000);
-
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
     // 9. Remove previous unused tokens for this user
     await prisma.passwordResetToken.deleteMany({
       where: {
@@ -93,16 +90,15 @@ export async function POST(request: Request) {
     resetUrl.searchParams.set("token", rawToken);
 
     // 12. Send the professional reset email
-    const { data: emailData, error: emailError } =
-      await resend.emails.send({
-        from: emailFrom,
-        to: [user.email],
-        subject: "Reset your password",
-        react: createElement(PasswordResetEmail, {
-          fullName: user.fullName,
-          resetUrl: resetUrl.toString(),
-        }),
-      });
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: emailFrom,
+      to: [user.email],
+      subject: "Reset your password",
+      react: createElement(PasswordResetEmail, {
+        fullName: user.fullName,
+        resetUrl: resetUrl.toString(),
+      }),
+    });
 
     // 13. Remove the token if email delivery was rejected
     if (emailError) {
@@ -135,7 +131,7 @@ export async function POST(request: Request) {
         success: false,
         message: "Unable to process the password reset request",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

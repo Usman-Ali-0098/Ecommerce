@@ -1,120 +1,79 @@
 import Link from "next/link";
 
-import type {
-  UserOrder,
-} from "@/types/order";
+import type { UserOrder } from "@/types/order";
 
 type OrdersTableProps = {
   orders: UserOrder[];
 };
 
-export default function OrdersTable({
-  orders,
-}: OrdersTableProps) {
+export default function OrdersTable({ orders }: OrdersTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-      <table className="w-full min-w-[850px] border-collapse">
+      <table className="w-full min-w-212.5 border-collapse">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            <th className="px-4 py-2.5">
-              Date
-            </th>
+            <th className="px-4 py-2.5">Date</th>
 
-            <th className="px-4 py-2.5">
-              Order #
-            </th>
+            <th className="px-4 py-2.5">Order #</th>
 
-            <th className="px-4 py-2.5">
-              Products
-            </th>
+            <th className="px-4 py-2.5">Products</th>
 
-            <th className="px-4 py-2.5">
-              Amount
-            </th>
+            <th className="px-4 py-2.5">Amount</th>
 
-            <th className="px-4 py-2.5">
-              Status
-            </th>
+            <th className="px-4 py-2.5">Status</th>
 
-            <th className="px-4 py-2.5 text-right">
-              Action
-            </th>
+            <th className="px-4 py-2.5 text-right">Action</th>
           </tr>
         </thead>
 
         <tbody>
-          {orders.map(
-            (order) => (
-              <tr
-                key={
-                  order.id
-                }
-                className="border-b border-gray-100 text-xs text-gray-700 transition last:border-b-0 hover:bg-gray-50/50"
-              >
-                <td className="whitespace-nowrap px-4 py-3">
-                  {formatDate(
-                    order.createdAt
-                  )}
-                </td>
+          {orders.map((order) => (
+            <tr
+              key={order.id}
+              className="border-b border-gray-100 text-xs text-gray-700 transition last:border-b-0 hover:bg-gray-50/50"
+            >
+              <td className="whitespace-nowrap px-4 py-3">
+                {formatDate(order.createdAt)}
+              </td>
 
-                <td className="px-4 py-3">
-                  <span className="font-medium text-gray-800">
-                    {
-                      order.orderNumber
-                    }
-                  </span>
-                </td>
+              <td className="px-4 py-3">
+                <span className="font-medium text-gray-800">
+                  {order.orderNumber}
+                </span>
+              </td>
 
-                <td className="px-4 py-3">
-                  {
-                    order.productCount
-                  }
-                </td>
+              <td className="px-4 py-3">{order.productCount}</td>
 
-                <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
-                  Rs.{" "}
-                  {order.total.toLocaleString(
-                    "en-PK",
-                    {
-                      minimumFractionDigits:
-                        2,
-                      maximumFractionDigits:
-                        2,
-                    }
-                  )}
-                </td>
+              <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
+                Rs.{" "}
+                {order.total.toLocaleString("en-PK", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </td>
 
-                <td className="px-4 py-4">
-                  <OrderStatusBadge
-                    status={
-                      order.status
-                    }
-                  />
-                </td>
+              <td className="px-4 py-4">
+                <OrderStatusBadge status={order.status} />
+              </td>
 
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/orders/${order.id}`}
-                    aria-label={`View order ${order.orderNumber}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-blue-50 hover:text-[#087ff5]"
-                  >
-                    <ArrowIcon />
-                  </Link>
-                </td>
-              </tr>
-            )
-          )}
+              <td className="px-4 py-3 text-right">
+                <Link
+                  href={`/orders/${order.id}`}
+                  aria-label={`View order ${order.orderNumber}`}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-blue-50 hover:text-[#087ff5]"
+                >
+                  <ArrowIcon />
+                </Link>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
-function OrderStatusBadge({
-  status,
-}: {
-  status: UserOrder["status"];
-}) {
+function OrderStatusBadge({ status }: { status: UserOrder["status"] }) {
   const labels = {
     PENDING: "Pending",
     PROCESSING: "In Progress",
@@ -147,29 +106,21 @@ function OrderStatusBadge({
 
   return (
     <span
-      className={`inline-flex min-w-[105px] items-center justify-center rounded-md px-3 py-1.5 text-[11px] font-medium ${getStatusClass()}`}
+      className={`inline-flex min-w-26.25 items-center justify-center rounded-md px-3 py-1.5 text-[11px] font-medium ${getStatusClass()}`}
     >
       {labels[status]}
     </span>
   );
 }
 
-function formatDate(
-  date: Date
-) {
-  return new Intl.DateTimeFormat(
-    "en-GB",
-    {
-      day:
-        "2-digit",
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
 
-      month:
-        "short",
+    month: "short",
 
-      year:
-        "numeric",
-    }
-  ).format(date);
+    year: "numeric",
+  }).format(date);
 }
 
 function ArrowIcon() {

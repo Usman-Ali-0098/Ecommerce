@@ -15,6 +15,8 @@ export const prisma =
     adapter,
   });
 
+// store prsiam golobally
+
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }

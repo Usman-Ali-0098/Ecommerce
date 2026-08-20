@@ -12,6 +12,7 @@ type GetPublicProductsParams = {
   pageSize?: number;
 };
 
+// "When you fetch the Product, also fetch its related category and images."
 const publicProductInclude = {
   category: true,
 
@@ -20,7 +21,7 @@ const publicProductInclude = {
       position: "asc",
     },
   },
-
+  // Which variants should I return with the product?
   variants: {
     where: {
       isActive: true,
@@ -41,6 +42,7 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
   include: typeof publicProductInclude;
 }>;
 
+// main function here
 export async function getPublicProducts({
   category,
   search,
@@ -66,7 +68,7 @@ export async function getPublicProducts({
           }
         : {}),
     },
-
+    // Should this product be included at all?
     variants: {
       some: {
         isActive: true,
@@ -94,11 +96,8 @@ export async function getPublicProducts({
       : {}),
   };
 
-  /*
-   * --------------------------------
-   * NEWEST / OLDEST
-   * --------------------------------
-   */
+  //  NEWEST / OLDEST sort
+
   if (sort === "newest" || sort === "oldest") {
     const orderBy: Prisma.ProductOrderByWithRelationInput = {
       createdAt: sort === "oldest" ? "asc" : "desc",
@@ -137,11 +136,8 @@ export async function getPublicProducts({
     };
   }
 
-  /*
-   * --------------------------------
-   * PRICE SORTING
-   * --------------------------------
-   */
+  //  PRICE SORTING
+
   const products = await prisma.product.findMany({
     where,
 
@@ -177,11 +173,8 @@ export async function getPublicProducts({
   };
 }
 
-/*
- * --------------------------------
- * MAP PUBLIC PRODUCT
- * --------------------------------
- */
+//  MAP PUBLIC PRODUCT
+
 function mapPublicProduct(product: ProductWithRelations) {
   /*
    * Find primary image.
@@ -191,12 +184,6 @@ function mapPublicProduct(product: ProductWithRelations) {
     product.images[0] ??
     null;
 
-  /*
-   * Primary image always first.
-   *
-   * This makes index 0 the
-   * default card image.
-   */
   const orderedImages = primaryImage
     ? [
         primaryImage,
@@ -268,12 +255,6 @@ function mapPublicProduct(product: ProductWithRelations) {
       slug: product.category.slug,
     },
 
-    /*
-     * Keep existing primary image.
-     *
-     * This keeps old components
-     * compatible with product.image.
-     */
     image: primaryImage
       ? {
           id: primaryImage.id,

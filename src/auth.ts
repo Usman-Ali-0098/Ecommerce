@@ -12,6 +12,10 @@ const DEFAULT_SESSION_MAX_AGE = 24 * ONE_HOUR;
 
 const REMEMBER_SESSION_MAX_AGE = 48 * ONE_HOUR;
 
+const ADMIN_SESSION_MAX_AGE = 8 * ONE_HOUR;
+
+const SESSION_REVALIDATION_INTERVAL = 5 * 60 * 1000;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     /*
@@ -83,14 +87,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        /*
-         * Customer Auth.js must not
-         * authenticate ADMIN accounts.
-         */
-        if (user.role !== "USER") {
-          return null;
-        }
-
         const passwordMatches = await bcrypt.compare(password, user.password);
 
         if (!passwordMatches) {
@@ -117,6 +113,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: REMEMBER_SESSION_MAX_AGE,
   },
 
+  // for google auth
+  // ## 6. Purpose of the callback   The signIn callback answers:  Should this attempted authentication be allowed? It also performs the project’s custom database linking.
+
   callbacks: {
     async signIn({ user, account, profile }) {
       /*
@@ -128,6 +127,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       const email = user.email?.trim().toLowerCase();
+
+      // Why not use email as the Google account identifier?  Email is an address and linking attribute. sub is the provider’s stable identity identifier.
 
       const googleAccountId =
         typeof profile?.sub === "string" ? profile.sub : null;
@@ -144,6 +145,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         profile &&
         "email_verified" in profile &&
         profile.email_verified === true;
+      // This matters because the project uses email to link an existing credentials customer with a Googleaccount.
 
       if (!emailVerified) {
         return false;
@@ -260,9 +262,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
 
+    ///////////////////////////////////////////////////////////
+
     async jwt({ token, user, account, profile }) {
       /*
        * Initial Google login.
+
+
        */
       if (account?.provider === "google") {
         const googleAccountId =
@@ -278,6 +284,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
          * Account
          *    ↓
          * User
+         *
+         * ## 19. Preventing provider identity from becoming application authority
+
+  Google provides data such as:
+
+  email
+  name
+  profile image
+
+  But the project’s database controls:
+
+  local user ID
+  application role
+  application full name
+         *
+         *
          */
         const databaseAccount = await prisma.account.findUnique({
           where: {
@@ -307,6 +329,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         token.rememberMe = false;
 
+        token.authProvider = "google";
+
+        token.authenticatedRole = "USER";
+
+        token.lastValidatedAt = Date.now();
+
         token.sessionExpiresAt = Date.now() + DEFAULT_SESSION_MAX_AGE * 1000;
 
         return token;
@@ -326,9 +354,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         token.rememberMe = rememberMe;
 
-        const maxAge = rememberMe
-          ? REMEMBER_SESSION_MAX_AGE
-          : DEFAULT_SESSION_MAX_AGE;
+        token.authProvider = "credentials";
+
+        token.authenticatedRole = user.role;
+
+        token.lastValidatedAt = Date.now();
+
+        const maxAge =
+          user.role === "ADMIN"
+            ? ADMIN_SESSION_MAX_AGE
+            : rememberMe
+              ? REMEMBER_SESSION_MAX_AGE
+              : DEFAULT_SESSION_MAX_AGE;
 
         token.sessionExpiresAt = Date.now() + maxAge * 1000;
 
@@ -344,6 +381,66 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       ) {
         return null;
       }
+
+      if (typeof token.id !== "string") {
+        return null;
+      }
+
+      const shouldRevalidate =
+        typeof token.lastValidatedAt !== "number" ||
+        Date.now() - token.lastValidatedAt >= SESSION_REVALIDATION_INTERVAL;
+
+      if (!shouldRevalidate) {
+        return token;
+      }
+
+      const userId = Number(token.id);
+
+      if (!Number.isInteger(userId)) {
+        return null;
+      }
+
+      const currentUser = await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+
+        select: {
+          fullName: true,
+          role: true,
+        },
+      });
+
+      if (!currentUser) {
+        return null;
+      }
+
+      /*
+       * A role change requires a fresh login instead of silently
+       * elevating or converting an existing authenticated session.
+       */
+      if (
+        token.authenticatedRole &&
+        currentUser.role !== token.authenticatedRole
+      ) {
+        return null;
+      }
+
+      /*
+       * Google remains a customer-only authentication path.
+       */
+      if (
+        token.authProvider === "google" &&
+        currentUser.role !== "USER"
+      ) {
+        return null;
+      }
+
+      token.role = currentUser.role;
+
+      token.fullName = currentUser.fullName;
+
+      token.lastValidatedAt = Date.now();
 
       return token;
     },

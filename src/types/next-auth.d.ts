@@ -36,5 +36,11 @@ declare module "next-auth/jwt" {
     rememberMe?: boolean;
 
     sessionExpiresAt?: number;
+
+    authProvider?: "credentials" | "google";
+
+    authenticatedRole?: "USER" | "ADMIN";
+
+    lastValidatedAt?: number;
   }
 }

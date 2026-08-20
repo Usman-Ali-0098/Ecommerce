@@ -44,59 +44,50 @@ export async function getUserNotifications({
   cursor,
   limit = DEFAULT_LIMIT,
 }: GetUserNotificationsParams) {
-  const safeLimit = Math.min(
-    Math.max(limit, 1),
-    50
-  );
+  const safeLimit = Math.min(Math.max(limit, 1), 50);
 
-  const notifications =
-    await prisma.notification.findMany({
-      where: {
-        userId,
+  const notifications = await prisma.notification.findMany({
+    where: {
+      userId,
+    },
+
+    orderBy: [
+      {
+        createdAt: "desc",
       },
-
-      orderBy: [
-        {
-          createdAt: "desc",
-        },
-        {
-          id: "desc",
-        },
-      ],
-
-      take: safeLimit + 1,
-
-      ...(cursor
-        ? {
-            cursor: {
-              id: cursor,
-            },
-            skip: 1,
-          }
-        : {}),
-
-      select: {
-        id: true,
-        type: true,
-        title: true,
-        message: true,
-        orderId: true,
-        isRead: true,
-        createdAt: true,
+      {
+        id: "desc",
       },
-    });
+    ],
 
-  const hasMore =
-    notifications.length > safeLimit;
+    take: safeLimit + 1,
 
-  const items = hasMore
-    ? notifications.slice(0, safeLimit)
-    : notifications;
+    ...(cursor
+      ? {
+          cursor: {
+            id: cursor,
+          },
+          skip: 1,
+        }
+      : {}),
+
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      message: true,
+      orderId: true,
+      isRead: true,
+      createdAt: true,
+    },
+  });
+
+  const hasMore = notifications.length > safeLimit;
+
+  const items = hasMore ? notifications.slice(0, safeLimit) : notifications;
 
   const nextCursor =
-    hasMore && items.length > 0
-      ? items[items.length - 1].id
-      : null;
+    hasMore && items.length > 0 ? items[items.length - 1].id : null;
 
   return {
     notifications: items,
@@ -105,9 +96,7 @@ export async function getUserNotifications({
   };
 }
 
-export async function getUnreadNotificationCount(
-  userId: number
-) {
+export async function getUnreadNotificationCount(userId: number) {
   return prisma.notification.count({
     where: {
       userId,
@@ -118,19 +107,18 @@ export async function getUnreadNotificationCount(
 
 export async function markNotificationAsRead(
   userId: number,
-  notificationId: string
+  notificationId: string,
 ) {
-  const notification =
-    await prisma.notification.findFirst({
-      where: {
-        id: notificationId,
-        userId,
-      },
-      select: {
-        id: true,
-        isRead: true,
-      },
-    });
+  const notification = await prisma.notification.findFirst({
+    where: {
+      id: notificationId,
+      userId,
+    },
+    select: {
+      id: true,
+      isRead: true,
+    },
+  });
 
   if (!notification) {
     return null;
@@ -154,9 +142,7 @@ export async function markNotificationAsRead(
   });
 }
 
-export async function markAllNotificationsAsRead(
-  userId: number
-) {
+export async function markAllNotificationsAsRead(userId: number) {
   return prisma.notification.updateMany({
     where: {
       userId,

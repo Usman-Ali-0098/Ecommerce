@@ -17,36 +17,27 @@ type ResetPasswordPageProps = {
 export default async function ResetPasswordPage({
   searchParams,
 }: ResetPasswordPageProps) {
-  const { token } =
-    await searchParams;
+  const { token } = await searchParams;
 
   if (!token) {
-    return (
-      <InvalidResetLink message="This password reset link is invalid." />
-    );
+    return <InvalidResetLink message="This password reset link is invalid." />;
   }
 
-  const tokenHash =
-    createHash("sha256")
-      .update(token)
-      .digest("hex");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
 
-  const resetToken =
-    await prisma.passwordResetToken.findUnique({
-      where: {
-        tokenHash,
-      },
+  const resetToken = await prisma.passwordResetToken.findUnique({
+    where: {
+      tokenHash,
+    },
 
-      select: {
-        expiresAt: true,
-        usedAt: true,
-      },
-    });
+    select: {
+      expiresAt: true,
+      usedAt: true,
+    },
+  });
 
   if (!resetToken) {
-    return (
-      <InvalidResetLink message="This password reset link is invalid." />
-    );
+    return <InvalidResetLink message="This password reset link is invalid." />;
   }
 
   if (resetToken.usedAt) {
@@ -55,13 +46,8 @@ export default async function ResetPasswordPage({
     );
   }
 
-  if (
-    resetToken.expiresAt <=
-    new Date()
-  ) {
-    return (
-      <InvalidResetLink message="This password reset link has expired." />
-    );
+  if (resetToken.expiresAt <= new Date()) {
+    return <InvalidResetLink message="This password reset link has expired." />;
   }
 
   return (
@@ -71,19 +57,13 @@ export default async function ResetPasswordPage({
       width="sm"
     >
       <AuthCard>
-        <ResetPasswordForm
-          token={token}
-        />
+        <ResetPasswordForm token={token} />
       </AuthCard>
     </AuthLayout>
   );
 }
 
-function InvalidResetLink({
-  message,
-}: {
-  message: string;
-}) {
+function InvalidResetLink({ message }: { message: string }) {
   return (
     <AuthLayout
       title="Reset Password"

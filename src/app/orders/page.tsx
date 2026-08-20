@@ -1,19 +1,13 @@
 import Link from "next/link";
-import {
-  redirect,
-} from "next/navigation";
+import { redirect } from "next/navigation";
 
-import {
-  auth,
-} from "@/auth";
+import { auth } from "@/auth";
 
 import SiteHeader from "@/components/layout/site-header";
 import OrdersPagination from "@/components/orders/orders-pagination";
 import OrdersTable from "@/components/orders/orders-table";
 
-import {
-  getUserOrders,
-} from "@/lib/services/order.service";
+import { getUserOrders } from "@/lib/services/order.service";
 
 type OrdersPageProps = {
   searchParams: Promise<{
@@ -21,63 +15,37 @@ type OrdersPageProps = {
   }>;
 };
 
-export default async function OrdersPage({
-  searchParams,
-}: OrdersPageProps) {
-  const session =
-    await auth();
+export default async function OrdersPage({ searchParams }: OrdersPageProps) {
+  const session = await auth();
 
-  if (
-    !session?.user?.id
-  ) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const userId =
-    Number(
-      session.user.id
-    );
+  const userId = Number(session.user.id);
 
-  if (
-    !Number.isInteger(
-      userId
-    )
-  ) {
+  if (!Number.isInteger(userId)) {
     redirect("/login");
   }
 
-  const params =
-    await searchParams;
+  const params = await searchParams;
 
-  const parsedPage =
-    Number(
-      params.page
-    );
+  const parsedPage = Number(params.page);
 
-  const page =
-    Number.isInteger(
-      parsedPage
-    ) &&
-    parsedPage > 0
-      ? parsedPage
-      : 1;
+  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
-  const {
-    orders,
-    pagination,
-  } =
-    await getUserOrders({
-      userId,
-      page,
-      pageSize: 20,
-    });
+  const { orders, pagination } = await getUserOrders({
+    userId,
+    page,
+    pageSize: 20,
+  });
 
   return (
     <>
       <SiteHeader />
 
       <main className="min-h-screen bg-[#f7f9fb] px-4 py-6 sm:px-6 lg:px-10">
-        <div className="mx-auto w-full max-w-[1400px]">
+        <div className="mx-auto w-full max-w-350">
           {/* Heading */}
 
           <div className="mb-5 flex items-center gap-2.5">
@@ -86,9 +54,7 @@ export default async function OrdersPage({
               aria-label="Back to products"
               className="flex h-8 w-8 items-center justify-center rounded-md text-[#087ff5] transition hover:bg-blue-50"
             >
-              <span className="text-lg">
-                ←
-              </span>
+              <span className="text-lg">←</span>
             </Link>
 
             <div>
@@ -102,8 +68,7 @@ export default async function OrdersPage({
             </div>
           </div>
 
-          {orders.length ===
-          0 ? (
+          {orders.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-white px-6 py-14 text-center">
               <p className="text-sm font-semibold text-gray-800">
                 No orders found
@@ -115,33 +80,20 @@ export default async function OrdersPage({
             </div>
           ) : (
             <>
-              <OrdersTable
-                orders={
-                  orders
-                }
-              />
+              <OrdersTable orders={orders} />
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-gray-500">
                   <span className="font-medium text-gray-700">
-                    {
-                      pagination.total
-                    }
+                    {pagination.total}
                   </span>{" "}
                   total order
-                  {pagination.total ===
-                  1
-                    ? ""
-                    : "s"}
+                  {pagination.total === 1 ? "" : "s"}
                 </p>
 
                 <OrdersPagination
-                  page={
-                    pagination.page
-                  }
-                  totalPages={
-                    pagination.totalPages
-                  }
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
                 />
               </div>
             </>

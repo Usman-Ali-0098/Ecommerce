@@ -1,10 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useState,
-  type FormEvent,
-} from "react";
+import { useState, type FormEvent } from "react";
 
 import AuthCard from "@/components/auth/auth-card";
 import AuthLayout from "@/components/auth/auth-layout";
@@ -13,32 +10,20 @@ import Alert from "@/components/ui/alert";
 import Button from "@/components/ui/button";
 import Input from "@/components/ui/input";
 
-import {
-  useAlert,
-} from "@/hooks/use-alert";
+import { useAlert } from "@/hooks/use-alert";
 
 import {
   forgotPasswordSchema,
   type ForgotPasswordInput,
 } from "@/lib/validations/auth";
 
-type ForgotPasswordErrors = Partial<
-  Record<
-    keyof ForgotPasswordInput,
-    string
-  >
->;
+type ForgotPasswordErrors = Partial<Record<keyof ForgotPasswordInput, string>>;
 
 type ForgotPasswordApiResponse = {
   success: boolean;
   message: string;
 
-  errors?: Partial<
-    Record<
-      keyof ForgotPasswordInput,
-      string[]
-    >
-  >;
+  errors?: Partial<Record<keyof ForgotPasswordInput, string[]>>;
 };
 
 const initialForm: ForgotPasswordInput = {
@@ -46,36 +31,15 @@ const initialForm: ForgotPasswordInput = {
 };
 
 export default function ForgotPasswordPage() {
-  const {
-    alert,
-    showAlert,
-    closeAlert,
-  } = useAlert();
+  const { alert, showAlert, closeAlert } = useAlert();
 
-  const [
-    form,
-    setForm,
-  ] =
-    useState<ForgotPasswordInput>(
-      initialForm
-    );
+  const [form, setForm] = useState<ForgotPasswordInput>(initialForm);
 
-  const [
-    errors,
-    setErrors,
-  ] =
-    useState<ForgotPasswordErrors>(
-      {}
-    );
+  const [errors, setErrors] = useState<ForgotPasswordErrors>({});
 
-  const [
-    isSubmitting,
-    setIsSubmitting,
-  ] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function updateEmail(
-    value: string
-  ) {
+  function updateEmail(value: string) {
     setForm({
       email: value,
     });
@@ -85,38 +49,23 @@ export default function ForgotPasswordPage() {
     }
   }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const validationResult =
-      forgotPasswordSchema.safeParse(
-        form
-      );
+    const validationResult = forgotPasswordSchema.safeParse(form);
 
-    if (
-      !validationResult.success
-    ) {
-      const emailIssue =
-        validationResult.error.issues.find(
-          (issue) =>
-            issue.path[0] ===
-            "email"
-        );
+    if (!validationResult.success) {
+      const emailIssue = validationResult.error.issues.find(
+        (issue) => issue.path[0] === "email",
+      );
 
       setErrors({
-        email:
-          emailIssue?.message,
+        email: emailIssue?.message,
       });
 
-      showAlert(
-        "Please enter a valid email address.",
-        {
-          variant:
-            "error",
-        }
-      );
+      showAlert("Please enter a valid email address.", {
+        variant: "error",
+      });
 
       return;
     }
@@ -125,84 +74,49 @@ export default function ForgotPasswordPage() {
     setErrors({});
 
     try {
-      const response =
-        await fetch(
-          "/api/auth/forgot-password",
-          {
-            method:
-              "POST",
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body:
-              JSON.stringify(
-                validationResult.data
-              ),
-          }
-        );
+        body: JSON.stringify(validationResult.data),
+      });
 
-      const data =
-        (await response.json()) as ForgotPasswordApiResponse;
+      const data = (await response.json()) as ForgotPasswordApiResponse;
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        if (
-          data.errors?.email?.[0]
-        ) {
+      if (!response.ok || !data.success) {
+        if (data.errors?.email?.[0]) {
           setErrors({
-            email:
-              data.errors
-                .email[0],
+            email: data.errors.email[0],
           });
         }
 
         showAlert(
-          data.message ||
-            "Unable to process the password reset request.",
+          data.message || "Unable to process the password reset request.",
           {
-            variant:
-              "error",
-          }
+            variant: "error",
+          },
         );
 
         return;
       }
 
-      setForm(
-        initialForm
-      );
+      setForm(initialForm);
 
-      showAlert(
-        data.message,
-        {
-          variant:
-            "success",
-          duration:
-            7000,
-        }
-      );
+      showAlert(data.message, {
+        variant: "success",
+        duration: 7000,
+      });
     } catch (error) {
-      console.error(
-        "Forgot password error:",
-        error
-      );
+      console.error("Forgot password error:", error);
 
-      showAlert(
-        "Unable to process the request right now. Please try again.",
-        {
-          variant:
-            "error",
-        }
-      );
+      showAlert("Unable to process the request right now. Please try again.", {
+        variant: "error",
+      });
     } finally {
-      setIsSubmitting(
-        false
-      );
+      setIsSubmitting(false);
     }
   }
 
@@ -214,26 +128,14 @@ export default function ForgotPasswordPage() {
     >
       {alert ? (
         <Alert
-          message={
-            alert.message
-          }
-          variant={
-            alert.variant
-          }
-          onClose={
-            closeAlert
-          }
+          message={alert.message}
+          variant={alert.variant}
+          onClose={closeAlert}
         />
       ) : null}
 
       <AuthCard>
-        <form
-          onSubmit={
-            handleSubmit
-          }
-          noValidate
-          className="space-y-4"
-        >
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <Input
             id="email"
             name="email"
@@ -241,34 +143,17 @@ export default function ForgotPasswordPage() {
             autoComplete="email"
             label="Email Address"
             placeholder="Enter your email"
-            value={
-              form.email
-            }
-            error={
-              errors.email
-            }
-            disabled={
-              isSubmitting
-            }
-            onChange={(
-              event
-            ) =>
-              updateEmail(
-                event.target
-                  .value
-              )
-            }
+            value={form.email}
+            error={errors.email}
+            disabled={isSubmitting}
+            onChange={(event) => updateEmail(event.target.value)}
           />
 
           <Button
             type="submit"
             fullWidth
-            loading={
-              isSubmitting
-            }
-            disabled={
-              isSubmitting
-            }
+            loading={isSubmitting}
+            disabled={isSubmitting}
           >
             Send Reset Link
           </Button>

@@ -23,11 +23,8 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const { alert, showAlert, closeAlert } = useAlert();
 
-  /*
-   * --------------------------------
-   * COLORS
-   * --------------------------------
-   */
+  // COLORS
+
   const colors = useMemo(() => {
     const uniqueColors = new Map<
       string,
@@ -43,11 +40,8 @@ export default function ProductCard({ product }: ProductCardProps) {
     return Array.from(uniqueColors.values());
   }, [product.variants]);
 
-  /*
-   * --------------------------------
-   * SIZES
-   * --------------------------------
-   */
+  //  SIZES
+
   const sizes = useMemo(() => {
     const uniqueSizes = new Map<
       string,
@@ -65,11 +59,8 @@ export default function ProductCard({ product }: ProductCardProps) {
     );
   }, [product.variants]);
 
-  /*
-   * --------------------------------
-   * STATE
-   * --------------------------------
-   */
+  //  STATE
+
   const [selectedSizeId, setSelectedSizeId] = useState("");
 
   const [selectedColorId, setSelectedColorId] = useState("");
@@ -78,20 +69,14 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const [isAdding, setIsAdding] = useState(false);
 
-  /*
-   * --------------------------------
-   * IMAGE HOVER STATE
-   * --------------------------------
-   */
+  // IMAGE HOVER STATE
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const [isImageHovered, setIsImageHovered] = useState(false);
 
-  /*
-   * Change image every 800ms
-   * while mouse remains over
-   * the image area.
-   */
+  // Change image every2s
+
   useEffect(() => {
     if (!isImageHovered || product.images.length <= 1) {
       return;
@@ -104,7 +89,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         );
       },
 
-      800,
+      2000,
     );
 
     return () => {
@@ -125,29 +110,18 @@ export default function ProductCard({ product }: ProductCardProps) {
 
     setCurrentImageIndex(1);
   }
-
-  /*
-   * Return to primary image
-   * when mouse leaves.
-   */
+  // when leave return primary
   function handleImageMouseLeave() {
     setIsImageHovered(false);
 
     setCurrentImageIndex(0);
   }
 
-  /*
-   * Fallback to product.image
-   * if images[] is empty.
-   */
   const currentProductImage =
     product.images[currentImageIndex] ?? product.image;
 
-  /*
-   * --------------------------------
-   * SELECTED VARIANT
-   * --------------------------------
-   */
+  //  SELECTED VARIANT by user
+
   const selectedVariant = findVariant({
     variants: product.variants,
 
@@ -164,11 +138,7 @@ export default function ProductCard({ product }: ProductCardProps) {
     product.totalStock <= 0 ||
     (selectedVariant ? selectedVariant.stock <= 0 : false);
 
-  /*
-   * --------------------------------
-   * VARIANT OPTION AVAILABILITY
-   * --------------------------------
-   */
+  // VARIANT OPTION AVAILABILITY
 
   function isColorAvailable(colorId: string) {
     return product.variants.some((variant) => {
@@ -243,11 +213,8 @@ export default function ProductCard({ product }: ProductCardProps) {
       }
     : currentProductImage;
 
-  /*
-   * --------------------------------
-   * QUANTITY
-   * --------------------------------
-   */
+  // QUANTITY
+
   function decreaseQuantity() {
     setQuantity((current) => Math.max(1, current - 1));
   }
@@ -256,11 +223,8 @@ export default function ProductCard({ product }: ProductCardProps) {
     setQuantity((current) => Math.min(availableStock, current + 1));
   }
 
-  /*
-   * --------------------------------
-   * ADD TO CART
-   * --------------------------------
-   */
+  // ADD TO CART
+
   async function handleAddToCart() {
     if (status === "loading") {
       return;
@@ -335,11 +299,8 @@ export default function ProductCard({ product }: ProductCardProps) {
     }
   }
 
-  /*
-   * --------------------------------
-   * UI
-   * --------------------------------
-   */
+  // UI;
+
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-md border border-[#d9dee7] bg-white transition-shadow hover:shadow-sm">
       {/* Product Image Gallery */}
@@ -395,19 +356,9 @@ export default function ProductCard({ product }: ProductCardProps) {
       <div className="flex flex-1 flex-col p-3">
         {/* Product Name */}
 
-        <h2 className="min-h-9.5 text-[13px] font-semibold leading-4.75 text-[#20252c]">
+        <h2 className="line-clamp-1 min-h-5 text-[13px] font-semibold leading-5 text-[#20252c]">
           {product.name}
         </h2>
-
-        {/* Description */}
-
-        <div className="mt-1 min-h-8">
-          {product.description ? (
-            <p className="line-clamp-2 text-[11px] leading-4 text-gray-500">
-              {product.description}
-            </p>
-          ) : null}
-        </div>
 
         {/* Price + Stock */}
 
@@ -433,112 +384,130 @@ export default function ProductCard({ product }: ProductCardProps) {
 
         {/* Variant Selection */}
 
-        {colors.length > 0 || sizes.length > 0 ? (
-          <div className="mt-3 space-y-2">
-            {/* Colors */}
+        <div className="mt-3 min-h-18 space-y-2">
+          {/* Colors */}
 
-            {colors.length > 0 ? (
-              <div className="flex items-center gap-2">
-                <span className="w-8 shrink-0 text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                  Color
-                </span>
+          <div className="flex items-center gap-2">
+            <span className="w-8 shrink-0 text-[9px] font-medium uppercase tracking-wide text-gray-400">
+              Color
+            </span>
 
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  {colors.map((color) => {
-                    const selected = selectedColorId === color.id;
-                    const available = isColorAvailable(color.id);
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {colors.length > 0 ? (
+                colors.map((color) => {
+                  const selected = selectedColorId === color.id;
+                  const available = isColorAvailable(color.id);
 
-                    return (
-                      <button
-                        key={color.id}
-                        type="button"
-                        onClick={() => {
-                          const nextColorId =
-                            selectedColorId === color.id ? "" : color.id;
+                  return (
+                    <button
+                      key={color.id}
+                      type="button"
+                      onClick={() => {
+                        const nextColorId =
+                          selectedColorId === color.id ? "" : color.id;
 
-                          setSelectedColorId(nextColorId);
-                          setQuantity(1);
+                        setSelectedColorId(nextColorId);
+                        setQuantity(1);
+                      }}
+                      disabled={!available && !selected}
+                      title={color.name}
+                      aria-label={`Select ${color.name}`}
+                      aria-pressed={selected}
+                      className={`relative flex h-5 w-5 items-center justify-center rounded-full transition ${
+                        selected
+                          ? "ring-2 ring-[#087ff5] ring-offset-1"
+                          : "hover:ring-1 hover:ring-gray-300 hover:ring-offset-1"
+                      } ${
+                        !available && !selected
+                          ? "cursor-not-allowed opacity-30"
+                          : ""
+                      }`}
+                    >
+                      <span
+                        className="h-4 w-4 rounded-full border border-gray-300"
+                        style={{
+                          backgroundColor: color.hexacode ?? "#e5e7eb",
                         }}
-                        disabled={!available && !selected}
-                        title={color.name}
-                        aria-label={`Select ${color.name}`}
-                        aria-pressed={selected}
-                        className={`relative flex h-5 w-5 items-center justify-center rounded-full transition ${
-                          selected
-                            ? "ring-2 ring-[#087ff5] ring-offset-1"
-                            : "hover:ring-1 hover:ring-gray-300 hover:ring-offset-1"
-                        } ${
-                          !available && !selected
-                            ? "cursor-not-allowed opacity-30"
-                            : ""
-                        }`}
-                      >
-                        <span
-                          className="h-4 w-4 rounded-full border border-gray-300"
-                          style={{
-                            backgroundColor: color.hexacode ?? "#e5e7eb",
-                          }}
-                        />
+                      />
 
-                        {selected ? (
-                          <span className="pointer-events-none absolute inset-0 rounded-full border border-white/70" />
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Sizes */}
-
-            {sizes.length > 0 ? (
-              <div className="flex items-center gap-2">
-                <span className="w-8 shrink-0 text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                  Size
-                </span>
-
-                <div className="flex min-w-0 flex-wrap items-center gap-1">
-                  {sizes.map((size) => {
-                    const selected = selectedSizeId === size.id;
-                    const available = isSizeAvailable(size.id);
-
-                    return (
-                      <button
-                        key={size.id}
-                        type="button"
-                        onClick={() => {
-                          const nextSizeId =
-                            selectedSizeId === size.id ? "" : size.id;
-
-                          setSelectedSizeId(nextSizeId);
-                          setQuantity(1);
-                        }}
-                        disabled={!available && !selected}
-                        aria-pressed={selected}
-                        className={`flex h-6 min-w-6 items-center justify-center rounded-[3px] border px-1.5 text-[10px] font-medium leading-none transition ${
-                          selected
-                            ? "border-[#087ff5] bg-blue-50 text-[#087ff5]"
-                            : "border-[#d6dde7] bg-white text-gray-600 hover:border-[#9fcfff]"
-                        } ${
-                          !available && !selected
-                            ? "cursor-not-allowed bg-gray-50 text-gray-300 opacity-60"
-                            : ""
-                        }`}
-                      >
-                        {size.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
+                      {selected ? (
+                        <span className="pointer-events-none absolute inset-0 rounded-full border border-white/70" />
+                      ) : null}
+                    </button>
+                  );
+                })
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="No color option"
+                  aria-label="No color option"
+                  className="flex h-5 items-center justify-center rounded-[3px] border border-gray-200 bg-gray-50 px-2 text-[9px] font-medium text-gray-300"
+                >
+                  N/A
+                </button>
+              )}
+            </div>
           </div>
-        ) : null}
+
+          {/* Sizes */}
+
+          <div className="flex items-center gap-2">
+            <span className="w-8 shrink-0 text-[9px] font-medium uppercase tracking-wide text-gray-400">
+              Size
+            </span>
+
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              {sizes.length > 0 ? (
+                sizes.map((size) => {
+                  const selected = selectedSizeId === size.id;
+                  const available = isSizeAvailable(size.id);
+
+                  return (
+                    <button
+                      key={size.id}
+                      type="button"
+                      onClick={() => {
+                        const nextSizeId =
+                          selectedSizeId === size.id ? "" : size.id;
+
+                        setSelectedSizeId(nextSizeId);
+                        setQuantity(1);
+                      }}
+                      disabled={!available && !selected}
+                      aria-pressed={selected}
+                      className={`flex h-6 min-w-6 items-center justify-center rounded-[3px] border px-1.5 text-[10px] font-medium leading-none transition ${
+                        selected
+                          ? "border-[#087ff5] bg-blue-50 text-[#087ff5]"
+                          : "border-[#d6dde7] bg-white text-gray-600 hover:border-[#9fcfff]"
+                      } ${
+                        !available && !selected
+                          ? "cursor-not-allowed bg-gray-50 text-gray-300 opacity-60"
+                          : ""
+                      }`}
+                    >
+                      {size.name}
+                    </button>
+                  );
+                })
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="No size option"
+                  aria-label="No size option"
+                  className="flex h-6 min-w-9 items-center justify-center rounded-[3px] border border-gray-200 bg-gray-50 px-2 text-[9px] font-medium text-gray-300"
+                >
+                  N/A
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Quantity + Cart */}
 
-        <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="mt-auto flex flex-col gap-2 pt-2.5 sm:flex-row sm:items-center">
           {/* Quantity Counter */}
 
           <div className="flex h-8 w-full items-center sm:w-auto">

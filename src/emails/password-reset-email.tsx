@@ -25,40 +25,29 @@ export default function PasswordResetEmail({
     <Html lang="en">
       <Head />
 
-      <Preview>
-        Reset your password. Link expires in 1 minute.
-      </Preview>
+      <Preview>Reset your password. Link expires in 2 minute.</Preview>
 
       <Body style={styles.body}>
         <Container style={styles.container}>
           {/* Header */}
 
           <Section style={styles.header}>
-            <Text style={styles.brand}>
-              SASTAPAK
-            </Text>
+            <Text style={styles.brand}>BudgetVibe</Text>
           </Section>
 
           {/* Content */}
 
           <Section style={styles.content}>
-            <Heading style={styles.heading}>
-              Reset Password
-            </Heading>
+            <Heading style={styles.heading}>Reset Password</Heading>
 
-            <Text style={styles.text}>
-              Hello {fullName},
-            </Text>
+            <Text style={styles.text}>Hello {fullName},</Text>
 
             <Text style={styles.text}>
               Click the button below to reset your password.
             </Text>
 
             <Section style={styles.buttonWrapper}>
-              <Button
-                href={resetUrl}
-                style={styles.button}
-              >
+              <Button href={resetUrl} style={styles.button}>
                 Reset Password
               </Button>
             </Section>
@@ -77,10 +66,7 @@ export default function PasswordResetEmail({
               Button not working? Use this link:
             </Text>
 
-            <Link
-              href={resetUrl}
-              style={styles.link}
-            >
+            <Link href={resetUrl} style={styles.link}>
               {resetUrl}
             </Link>
           </Section>
@@ -127,8 +113,7 @@ const styles = {
 
     backgroundColor: "#087ff5",
 
-    textAlign:
-      "center" as const,
+    textAlign: "center" as const,
   },
 
   brand: {
@@ -158,8 +143,7 @@ const styles = {
 
     lineHeight: "1.25",
 
-    textAlign:
-      "center" as const,
+    textAlign: "center" as const,
   },
 
   text: {
@@ -175,8 +159,7 @@ const styles = {
   buttonWrapper: {
     padding: "6px 0 18px",
 
-    textAlign:
-      "center" as const,
+    textAlign: "center" as const,
   },
 
   button: {
@@ -214,8 +197,7 @@ const styles = {
 
     lineHeight: "1.45",
 
-    textAlign:
-      "center" as const,
+    textAlign: "center" as const,
   },
 
   secondaryText: {
@@ -251,8 +233,7 @@ const styles = {
 
     lineHeight: "1.4",
 
-    wordBreak:
-      "break-all" as const,
+    wordBreak: "break-all" as const,
 
     textDecoration: "none",
   },
@@ -274,7 +255,6 @@ const styles = {
 
     lineHeight: "1.4",
 
-    textAlign:
-      "center" as const,
+    textAlign: "center" as const,
   },
 };
