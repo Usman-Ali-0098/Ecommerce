@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { getUserSession } from "@/lib/user-auth";
 
 import {
   getUnreadNotificationCount,
@@ -27,9 +28,16 @@ export async function GET(request: Request) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -40,6 +48,8 @@ export async function GET(request: Request) {
         },
       );
     }
+
+    const userId = user.id;
 
     const url = new URL(request.url);
 
@@ -112,9 +122,16 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -125,6 +142,8 @@ export async function PATCH(request: Request) {
         },
       );
     }
+
+    const userId = user.id;
 
     const body = await request.json();
 

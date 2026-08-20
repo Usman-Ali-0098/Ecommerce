@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getUserSession } from "@/lib/user-auth";
 
 export async function POST(request: Request) {
   try {
@@ -19,9 +20,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -32,6 +40,8 @@ export async function POST(request: Request) {
         }
       );
     }
+
+    const userId = user.id;
 
     const body = await request.json();
 

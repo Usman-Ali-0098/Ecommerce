@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { getUserSession } from "@/lib/user-auth";
 
 import {
   createOrder,
@@ -24,9 +25,16 @@ export async function GET(request: Request) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -53,7 +61,7 @@ export async function GET(request: Request) {
         : 20;
 
     const result = await getUserOrders({
-      userId,
+      userId: user.id,
       page,
       pageSize,
     });
@@ -98,9 +106,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -150,7 +165,7 @@ export async function POST(request: Request) {
     }
 
     const order = await createOrder({
-      userId,
+      userId: user.id,
       cartItemIds,
     });
 

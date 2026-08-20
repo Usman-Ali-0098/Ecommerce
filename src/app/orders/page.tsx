@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-
 import SiteHeader from "@/components/layout/site-header";
 import OrdersPagination from "@/components/orders/orders-pagination";
 import OrdersTable from "@/components/orders/orders-table";
 
 import { getUserOrders } from "@/lib/services/order.service";
+import { getUserSession } from "@/lib/user-auth";
 
 type OrdersPageProps = {
   searchParams: Promise<{
@@ -16,16 +15,10 @@ type OrdersPageProps = {
 };
 
 export default async function OrdersPage({ searchParams }: OrdersPageProps) {
-  const session = await auth();
+  const user = await getUserSession();
 
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const userId = Number(session.user.id);
-
-  if (!Number.isInteger(userId)) {
-    redirect("/login");
+  if (!user) {
+    redirect("/");
   }
 
   const params = await searchParams;
@@ -35,7 +28,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   const { orders, pagination } = await getUserOrders({
-    userId,
+    userId: user.id,
     page,
     pageSize: 20,
   });

@@ -1,3 +1,6 @@
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
 import SiteHeader from "@/components/layout/site-header";
 import ProductFilters from "@/components/products/product-filters";
 import InfiniteProductGrid from "@/components/products/infinite-product-grid";
@@ -20,6 +23,12 @@ type HomePageProps = {
 const INITIAL_PAGE_SIZE = 12;
 
 export default async function HomePage({ searchParams }: HomePageProps) {
+  const session = await auth();
+
+  if (session?.user?.role === "ADMIN") {
+    redirect("/admin/products");
+  }
+
   // "Wait for Next.js to give me the actual URL query parameters.";
   const params = await searchParams;
 

@@ -2,27 +2,20 @@ import Link from "next/link";
 
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-
 import CartClient from "@/components/cart/cart-client";
 import SiteHeader from "@/components/layout/site-header";
 
 import { getUserCart } from "@/lib/services/cart.service";
+import { getUserSession } from "@/lib/user-auth";
 
 export default async function CartPage() {
-  const session = await auth();
+  const user = await getUserSession();
 
-  if (!session?.user?.id) {
-    redirect("/login");
+  if (!user) {
+    redirect("/");
   }
 
-  const userId = Number(session.user.id);
-
-  if (!Number.isInteger(userId)) {
-    redirect("/login");
-  }
-
-  const cart = await getUserCart(userId);
+  const cart = await getUserCart(user.id);
 
   return (
     <>

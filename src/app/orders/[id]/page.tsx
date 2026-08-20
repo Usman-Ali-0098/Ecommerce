@@ -3,11 +3,10 @@ import Link from "next/link";
 
 import { notFound, redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-
 import SiteHeader from "@/components/layout/site-header";
 
 import { getUserOrderById } from "@/lib/services/order.service";
+import { getUserSession } from "@/lib/user-auth";
 
 type OrderDetailPageProps = {
   params: Promise<{
@@ -18,21 +17,15 @@ type OrderDetailPageProps = {
 export default async function OrderDetailPage({
   params,
 }: OrderDetailPageProps) {
-  const session = await auth();
+  const user = await getUserSession();
 
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  const userId = Number(session.user.id);
-
-  if (!Number.isInteger(userId)) {
-    redirect("/login");
+  if (!user) {
+    redirect("/");
   }
 
   const { id } = await params;
 
-  const order = await getUserOrderById(userId, id);
+  const order = await getUserOrderById(user.id, id);
 
   if (!order) {
     notFound();

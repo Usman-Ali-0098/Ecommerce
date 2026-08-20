@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getUserSession } from "@/lib/user-auth";
 
 type RouteContext = {
   params: Promise<{
@@ -25,9 +26,16 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -38,6 +46,8 @@ export async function PATCH(request: Request, context: RouteContext) {
         },
       );
     }
+
+    const userId = user.id;
 
     const { itemId } = await context.params;
 
@@ -220,9 +230,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
       );
     }
 
-    const userId = Number(session.user.id);
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
 
-    if (!Number.isInteger(userId)) {
+    const user = await getUserSession();
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -233,6 +250,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
         },
       );
     }
+
+    const userId = user.id;
 
     const { itemId } = await context.params;
 
