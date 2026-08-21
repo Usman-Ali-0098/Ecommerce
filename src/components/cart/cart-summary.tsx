@@ -13,9 +13,11 @@ export default function CartSummary({
 }: CartSummaryProps) {
   const TAX_RATE = 0.1;
 
-  const tax = subtotal * TAX_RATE;
+  const roundedSubtotal = Math.round(subtotal);
 
-  const total = subtotal + tax;
+  const tax = Math.round(roundedSubtotal * TAX_RATE);
+
+  const total = roundedSubtotal + tax;
 
   return (
     <div className="ml-auto mt-6 w-full max-w-sm">
@@ -34,11 +36,7 @@ export default function CartSummary({
 
             <span className="font-medium text-gray-800">
               Rs.{" "}
-              {subtotal.toLocaleString("en-PK", {
-                minimumFractionDigits: 2,
-
-                maximumFractionDigits: 2,
-              })}
+              {roundedSubtotal.toLocaleString("en-PK")}
             </span>
           </div>
 
@@ -47,11 +45,7 @@ export default function CartSummary({
 
             <span className="font-medium text-gray-800">
               Rs.{" "}
-              {tax.toLocaleString("en-PK", {
-                minimumFractionDigits: 2,
-
-                maximumFractionDigits: 2,
-              })}
+              {tax.toLocaleString("en-PK")}
             </span>
           </div>
 
@@ -60,11 +54,7 @@ export default function CartSummary({
 
             <span className="text-base font-semibold text-gray-900">
               Rs.{" "}
-              {total.toLocaleString("en-PK", {
-                minimumFractionDigits: 2,
-
-                maximumFractionDigits: 2,
-              })}
+              {total.toLocaleString("en-PK")}
             </span>
           </div>
 

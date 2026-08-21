@@ -102,6 +102,7 @@ type AddedVariant = {
   sizeId: string | null;
   sizeName: string | null;
 
+  price: number;
   quantity: number;
 
   existingImageUrl?: string | null;
@@ -159,32 +160,19 @@ export default function AdminProductForm({
 
   const isEditMode = Boolean(initialData);
 
-  /*
-   * --------------------------------
-   * SIMPLE PRODUCT CHECK
-   * --------------------------------
-   */
+  // SIMPLE PRODUCT CHECK
 
   const initialIsSimple =
     initialData?.variants.length === 1 &&
     !initialData.variants[0]?.colorId &&
     !initialData.variants[0]?.sizeId;
 
-  /*
-   * --------------------------------
-   * PRODUCT STATE
-   * --------------------------------
-   */
+  // PRODUCT STATE
 
   const [name, setName] = useState(initialData?.name ?? "");
 
   const [categoryId, setCategoryId] = useState(initialData?.categoryId ?? "");
 
-  /*
-   * Local copy is important because
-   * newly-created categories can be
-   * added without refreshing page.
-   */
   const [categoryOptions, setCategoryOptions] =
     useState<CategoryOption[]>(categories);
 
@@ -229,11 +217,7 @@ export default function AdminProductForm({
 
   const [isActive, setIsActive] = useState(initialData?.isActive ?? true);
 
-  /*
-   * --------------------------------
-   * IMAGE STATE
-   * --------------------------------
-   */
+  // IMAGE STATE
 
   const [existingImages, setExistingImages] = useState<InitialImage[]>(
     () => initialData?.images ?? [],
@@ -264,11 +248,7 @@ export default function AdminProductForm({
     };
   }, []);
 
-  /*
-   * --------------------------------
-   * VARIANT STATE
-   * --------------------------------
-   */
+  // VARIANT STATE
 
   const [selectedColorId, setSelectedColorId] = useState("");
 
@@ -305,6 +285,7 @@ export default function AdminProductForm({
 
       sizeName: variant.sizeName,
 
+      price: variant.price,
       quantity: variant.stock,
 
       existingImageUrl: variant.imageUrl ?? null,
@@ -885,6 +866,15 @@ export default function AdminProductForm({
     }
 
     const qty = Number(variantQuantity);
+    const variantPrice = Number(price);
+
+    if (!Number.isInteger(variantPrice) || variantPrice <= 0) {
+      showAlert("Enter a whole-rupee default price before adding a variant.", {
+        variant: "warning",
+      });
+
+      return;
+    }
 
     if (!Number.isInteger(qty) || qty < 0) {
       showAlert("Enter a valid variant quantity.", {
@@ -938,6 +928,7 @@ export default function AdminProductForm({
 
         sizeName: size?.name ?? null,
 
+        price: variantPrice,
         quantity: qty,
 
         existingImageUrl: null,
@@ -1061,8 +1052,8 @@ export default function AdminProductForm({
 
     const numericPrice = Number(price);
 
-    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
-      showAlert("Please enter a valid price.", {
+    if (!Number.isInteger(numericPrice) || numericPrice <= 0) {
+      showAlert("Please enter a whole-rupee price.", {
         variant: "warning",
       });
 
@@ -1093,6 +1084,14 @@ export default function AdminProductForm({
       for (const variant of variants) {
         if (!variant.sku.trim()) {
           showAlert("Every variant requires an SKU.", {
+            variant: "warning",
+          });
+
+          return false;
+        }
+
+        if (!Number.isInteger(variant.price) || variant.price <= 0) {
+          showAlert(`Enter a whole-rupee price for ${variant.sku}.`, {
             variant: "warning",
           });
 
@@ -1164,7 +1163,7 @@ export default function AdminProductForm({
               return {
                 id: variant.existingVariantId,
                 sku: variant.sku.trim().toUpperCase(),
-                price: Number(price),
+                price: variant.price,
                 stock: variant.quantity,
                 colorId: variant.colorId,
                 sizeId: variant.sizeId,
@@ -1599,7 +1598,9 @@ export default function AdminProductForm({
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-gray-700">
-                  Price
+                  {variants.length > 0
+                    ? "Default Price for New Variants"
+                    : "Price"}
                 </label>
 
                 <div className="relative">
@@ -1609,14 +1610,21 @@ export default function AdminProductForm({
 
                   <input
                     type="number"
-                    min="0"
-                    step="0.01"
+                    min="1"
+                    step="1"
                     value={price}
                     onChange={(event) => setPrice(event.target.value)}
                     placeholder="0.00"
                     className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
+
+                {variants.length > 0 ? (
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    Applied when a new variant is added. Existing variant prices
+                    can be edited below.
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -1679,8 +1687,8 @@ export default function AdminProductForm({
                   </h3>
 
                   <p className="mt-0.5 text-[11px] text-gray-400">
-                    Add color and/or size combinations with individual stock
-                    quantities.
+                    Add color and/or size combinations with individual prices
+                    and stock quantities.
                   </p>
                 </div>
 
@@ -2005,8 +2013,8 @@ export default function AdminProductForm({
                   </div>
                 ) : (
                   <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200">
-                    <div className="min-w-205">
-                      <div className="grid grid-cols-[1fr_1fr_1.4fr_110px_90px_42px] bg-gray-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    <div className="min-w-230">
+                      <div className="grid grid-cols-[1fr_1fr_1.3fr_100px_110px_90px_42px] bg-gray-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                         <div>Color</div>
 
                         <div>Size</div>
@@ -2014,6 +2022,8 @@ export default function AdminProductForm({
                         <div>SKU</div>
 
                         <div>Image</div>
+
+                        <div>Price</div>
 
                         <div>Stock</div>
 
@@ -2023,7 +2033,7 @@ export default function AdminProductForm({
                       {variants.map((variant) => (
                         <div
                           key={variant.id}
-                          className="grid grid-cols-[1fr_1fr_1.4fr_110px_90px_42px] items-center border-t border-gray-100 px-3 py-2.5"
+                          className="grid grid-cols-[1fr_1fr_1.3fr_100px_110px_90px_42px] items-center border-t border-gray-100 px-3 py-2.5"
                         >
                           {/* Color */}
 
@@ -2157,6 +2167,34 @@ export default function AdminProductForm({
                                 Add
                               </button>
                             )}
+                          </div>
+
+                          {/* Price */}
+
+                          <div className="relative pr-2">
+                            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
+                              Rs.
+                            </span>
+
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={variant.price}
+                              onChange={(event) =>
+                                setVariants((current) =>
+                                  current.map((item) =>
+                                    item.id === variant.id
+                                      ? {
+                                          ...item,
+                                          price: Number(event.target.value),
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              className="h-8 w-full rounded-md border border-gray-200 bg-white pl-7 pr-2 text-xs text-gray-900 outline-none transition focus:border-blue-500"
+                            />
                           </div>
 
                           {/* Quantity */}

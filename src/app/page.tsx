@@ -50,10 +50,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
    * RESET KEY
    * Whenever category, search, or sort
    * changes, this key changes.
-   *
-   * React then mounts a fresh
-   * InfiniteProductGrid with the new
-   * server-fetched products.
    */
   const productsKey = [category ?? "all", search ?? "", sort].join(":");
 

@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createElement } from "react";
+import { render } from "@react-email/render";
 import { NextResponse } from "next/server";
 
 import PasswordResetEmail from "@/emails/password-reset-email";
+import createMailer from "@/lib/mailer";
 import prisma from "@/lib/prisma";
-import resend from "@/lib/resend";
 import { forgotPasswordSchema } from "@/lib/validations/auth";
 
 const GENERIC_RESPONSE =
@@ -89,21 +90,31 @@ export async function POST(request: Request) {
 
     resetUrl.searchParams.set("token", rawToken);
 
-    // 12. Send the professional reset email
-    const { data: emailData, error: emailError } = await resend.emails.send({
-      from: emailFrom,
-      to: [user.email],
-      subject: "Reset your password",
-      react: createElement(PasswordResetEmail, {
+    // 12. Render and send the password reset email through Gmail SMTP
+    const emailHtml = await render(
+      createElement(PasswordResetEmail, {
         fullName: user.fullName,
         resetUrl: resetUrl.toString(),
       }),
-    });
+    );
 
-    // 13. Remove the token if email delivery was rejected
-    if (emailError) {
+    try {
+      const mailer = createMailer();
+      const emailData = await mailer.sendMail({
+        from: emailFrom,
+        to: user.email,
+        subject: "Reset your password",
+        html: emailHtml,
+      });
+
+      console.log("Password reset email accepted:", {
+        messageId: emailData.messageId,
+        userId: user.id,
+      });
+    } catch (emailError) {
       console.error("Password reset email error:", emailError);
 
+      // 13. Remove the token if email delivery failed
       await prisma.passwordResetToken.delete({
         where: {
           tokenHash,
@@ -112,11 +123,6 @@ export async function POST(request: Request) {
 
       throw new Error("Password reset email could not be sent");
     }
-
-    console.log("Password reset email accepted:", {
-      emailId: emailData?.id,
-      userId: user.id,
-    });
 
     // 14. Return the safe generic response
     return NextResponse.json({

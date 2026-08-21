@@ -46,10 +46,7 @@ export default function OrdersTable({ orders }: OrdersTableProps) {
 
               <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
                 Rs.{" "}
-                {order.total.toLocaleString("en-PK", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {Math.round(order.total).toLocaleString("en-PK")}
               </td>
 
               <td className="px-4 py-4">

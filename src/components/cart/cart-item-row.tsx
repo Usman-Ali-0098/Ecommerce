@@ -99,11 +99,11 @@ export default function CartItemRow({
       </td>
 
       <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-700">
-        Rs. {item.variant.price.toLocaleString("en-PK")}
+        Rs. {Math.round(item.variant.price).toLocaleString("en-PK")}
       </td>
 
       <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
-        Rs. {item.lineTotal.toLocaleString("en-PK")}
+        Rs. {Math.round(item.lineTotal).toLocaleString("en-PK")}
       </td>
 
       <td className="px-4 py-3 text-center">

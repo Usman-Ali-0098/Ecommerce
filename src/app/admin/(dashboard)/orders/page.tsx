@@ -89,7 +89,7 @@ export default async function AdminOrdersPage({
 
         <OrderSummaryCard
           label="Total Amount"
-          value={`Rs. ${result.summary.totalAmount.toLocaleString(
+          value={`Rs. ${Math.round(result.summary.totalAmount).toLocaleString(
             "en-PK"
           )}`}
           icon={

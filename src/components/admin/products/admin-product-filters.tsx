@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  useState,
-  type FormEvent,
-} from "react";
+import { useState, type FormEvent } from "react";
 
-import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type CategoryOption = {
   id: string;
@@ -27,85 +21,41 @@ export default function AdminProductFilters({
   initialSearch,
   initialCategory,
 }: AdminProductFiltersProps) {
-  const router =
-    useRouter();
+  const router = useRouter();
 
-  const searchParams =
-    useSearchParams();
+  const searchParams = useSearchParams();
 
-  const [
-    search,
-    setSearch,
-  ] = useState(
-    initialSearch
-  );
+  const [search, setSearch] = useState(initialSearch);
 
-  function updateUrl(
-    updates: {
-      search?: string;
-      category?: string;
-    }
-  ) {
-    const params =
-      new URLSearchParams(
-        searchParams.toString()
-      );
+  function updateUrl(updates: { search?: string; category?: string }) {
+    const params = new URLSearchParams(searchParams.toString());
 
-    if (
-      updates.search !==
-      undefined
-    ) {
-      const value =
-        updates.search.trim();
+    if (updates.search !== undefined) {
+      const value = updates.search.trim();
 
       if (value) {
-        params.set(
-          "search",
-          value
-        );
+        params.set("search", value);
       } else {
-        params.delete(
-          "search"
-        );
+        params.delete("search");
       }
     }
 
-    if (
-      updates.category !==
-      undefined
-    ) {
-      if (
-        updates.category
-      ) {
-        params.set(
-          "category",
-          updates.category
-        );
+    if (updates.category !== undefined) {
+      if (updates.category) {
+        params.set("category", updates.category);
       } else {
-        params.delete(
-          "category"
-        );
+        params.delete("category");
       }
     }
 
-    params.delete(
-      "page"
-    );
+    params.delete("page");
 
-    const query =
-      params.toString();
+    const query = params.toString();
 
-    router.push(
-      query
-        ? `/admin/products?${query}`
-        : "/admin/products"
-    );
+    router.push(query ? `/admin/products?${query}` : "/admin/products");
   }
 
-  function handleSearch(
-    event:
-      FormEvent<HTMLFormElement>
-  ) {
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     updateUrl({
@@ -113,15 +63,10 @@ export default function AdminProductFilters({
     });
   }
 
-  function handleSearchChange(
-    value: string
-  ) {
+  function handleSearchChange(value: string) {
     setSearch(value);
 
-    if (
-      !value &&
-      initialSearch
-    ) {
+    if (!value && initialSearch) {
       updateUrl({
         search: "",
       });
@@ -131,41 +76,23 @@ export default function AdminProductFilters({
   function handleClear() {
     setSearch("");
 
-    router.push(
-      "/admin/products"
-    );
+    router.push("/admin/products");
   }
 
-  const hasFilters =
-    Boolean(
-      initialSearch ||
-      initialCategory
-    );
+  const hasFilters = Boolean(initialSearch || initialCategory);
 
   return (
     <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
       {/* Search */}
 
-      <form
-        onSubmit={
-          handleSearch
-        }
-        className="flex min-w-0 flex-1 gap-2"
-      >
+      <form onSubmit={handleSearch} className="flex min-w-0 flex-1 gap-2">
         <div className="relative min-w-0 flex-1">
           <SearchIcon />
 
           <input
             type="search"
             value={search}
-            onChange={(
-              event
-            ) =>
-              handleSearchChange(
-                event.target
-                  .value
-              )
-            }
+            onChange={(event) => handleSearchChange(event.target.value)}
             placeholder="Search by product name..."
             className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
@@ -182,42 +109,23 @@ export default function AdminProductFilters({
       {/* Category */}
 
       <div className="flex items-center gap-2">
-        <div className="relative min-w-[180px] flex-1 lg:flex-none">
+        <div className="relative min-w-45 flex-1 lg:flex-none">
           <select
-            value={
-              initialCategory
-            }
-            onChange={(
-              event
-            ) =>
+            value={initialCategory}
+            onChange={(event) =>
               updateUrl({
-                category:
-                  event.target
-                    .value,
+                category: event.target.value,
               })
             }
             className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-9 text-xs text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            <option value="">
-              All Categories
-            </option>
+            <option value="">All Categories</option>
 
-            {categories.map(
-              (category) => (
-                <option
-                  key={
-                    category.id
-                  }
-                  value={
-                    category.slug
-                  }
-                >
-                  {
-                    category.name
-                  }
-                </option>
-              )
-            )}
+            {categories.map((category) => (
+              <option key={category.id} value={category.slug}>
+                {category.name}
+              </option>
+            ))}
           </select>
 
           <SelectArrowIcon />
@@ -226,9 +134,7 @@ export default function AdminProductFilters({
         {hasFilters ? (
           <button
             type="button"
-            onClick={
-              handleClear
-            }
+            onClick={handleClear}
             className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
           >
             Clear

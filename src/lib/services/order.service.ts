@@ -38,7 +38,7 @@ type CreateOrderParams = {
 };
 
 function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
+  return Math.round(value);
 }
 
 function createOrderNumber() {
@@ -327,7 +327,7 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
 
     const tax = roundMoney(subtotal * TAX_RATE);
 
-    const total = roundMoney(subtotal + tax);
+    const total = subtotal + tax;
 
     for (const item of cartItems) {
       const stockUpdate = await tx.productVariant.updateMany({
@@ -442,8 +442,8 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
 
         title: "New Order Placed",
 
-        message: `A customer placed order ${newOrder.orderNumber} for Rs. ${Number(
-          newOrder.total,
+        message: `A customer placed order ${newOrder.orderNumber} for Rs. ${Math.round(
+          Number(newOrder.total),
         ).toLocaleString("en-PK")}.`,
       },
     });

@@ -37,8 +37,25 @@ export default function ProductCard({ product }: ProductCardProps) {
       }
     });
 
-    return Array.from(uniqueColors.values());
-  }, [product.variants]);
+    const orderedColors = Array.from(uniqueColors.values());
+    const primaryColorId = product.image?.colorId;
+
+    if (!primaryColorId) {
+      return orderedColors;
+    }
+
+    return orderedColors.sort((a, b) => {
+      if (a.id === primaryColorId) {
+        return -1;
+      }
+
+      if (b.id === primaryColorId) {
+        return 1;
+      }
+
+      return 0;
+    });
+  }, [product.image?.colorId, product.variants]);
 
   //  SIZES
 
@@ -387,7 +404,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             </p>
 
             <p className="mt-0.5 whitespace-nowrap text-[16px] font-semibold leading-none text-[#087ff5]">
-              Rs. {displayPrice.toLocaleString("en-PK")}
+              Rs. {Math.round(displayPrice).toLocaleString("en-PK")}
             </p>
           </div>
 

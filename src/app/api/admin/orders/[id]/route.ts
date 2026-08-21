@@ -30,12 +30,10 @@ const allowedTransitions:
   > = {
   PENDING: [
     "PROCESSING",
-    "CANCELLED",
   ],
 
   PROCESSING: [
     "SHIPPED",
-    "CANCELLED",
   ],
 
   SHIPPED: [
@@ -46,6 +44,8 @@ const allowedTransitions:
 
   CANCELLED: [],
 };
+
+class ConcurrentOrderUpdateError extends Error {}
 
 function isOrderStatus(
   value: unknown
@@ -58,7 +58,6 @@ function isOrderStatus(
       "PROCESSING",
       "SHIPPED",
       "DELIVERED",
-      "CANCELLED",
     ].includes(value)
   );
 }
@@ -102,18 +101,6 @@ function getNotificationData(
 
         message:
           `Your order ${orderNumber} has been delivered.`,
-      };
-
-    case "CANCELLED":
-      return {
-        type:
-          "ORDER_CANCELLED" as const,
-
-        title:
-          "Order Cancelled",
-
-        message:
-          `Your order ${orderNumber} has been cancelled.`,
       };
 
     default:
@@ -193,17 +180,6 @@ export async function PATCH(
           id,
         },
 
-        include: {
-          items: {
-            select: {
-              variantId:
-                true,
-
-              quantity:
-                true,
-            },
-          },
-        },
       });
 
     if (!order) {
@@ -274,9 +250,10 @@ export async function PATCH(
      */
     await prisma.$transaction(
       async (tx) => {
-        await tx.order.update({
+        const statusUpdate = await tx.order.updateMany({
           where: {
             id,
+            status: currentStatus,
           },
 
           data: {
@@ -285,42 +262,10 @@ export async function PATCH(
           },
         });
 
-        /*
-         * If order is cancelled,
-         * restore stock.
-         *
-         * Cancellation is only allowed
-         * before SHIPPED, so stock won't
-         * be restored after dispatch.
-         */
-        if (
-          newStatus ===
-          "CANCELLED"
-        ) {
-          for (
-            const item
-            of order.items
-          ) {
-            if (
-              !item.variantId
-            ) {
-              continue;
-            }
-
-            await tx.productVariant.updateMany({
-              where: {
-                id:
-                  item.variantId,
-              },
-
-              data: {
-                stock: {
-                  increment:
-                    item.quantity,
-                },
-              },
-            });
-          }
+        if (statusUpdate.count !== 1) {
+          throw new ConcurrentOrderUpdateError(
+            "Order status changed while this request was being processed.",
+          );
         }
 
         /*
@@ -346,7 +291,11 @@ export async function PATCH(
             },
           });
         }
-      }
+      },
+      {
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
     );
 
     return NextResponse.json({
@@ -356,6 +305,16 @@ export async function PATCH(
         `Order status changed to ${newStatus.toLowerCase()}.`,
     });
   } catch (error) {
+    if (error instanceof ConcurrentOrderUpdateError) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This order was updated by another request. Refresh and try again.",
+        },
+        { status: 409 },
+      );
+    }
+
     console.error(
       "Admin order status update error:",
       error

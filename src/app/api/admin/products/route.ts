@@ -154,8 +154,8 @@ function normalizeVariants(value: unknown): VariantInput[] {
       throw new RouteError("Every variant requires an SKU.");
     }
 
-    if (!Number.isFinite(price) || price <= 0) {
-      throw new RouteError(`Invalid price for ${sku}.`);
+    if (!Number.isInteger(price) || price <= 0) {
+      throw new RouteError(`Price for ${sku} must be a whole rupee amount.`);
     }
 
     if (!Number.isInteger(stock) || stock < 0) {

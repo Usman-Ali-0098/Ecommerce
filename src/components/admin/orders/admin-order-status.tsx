@@ -27,9 +27,9 @@ type Props = {
 };
 
 const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
-  PENDING: ["PROCESSING", "CANCELLED"],
+  PENDING: ["PROCESSING"],
 
-  PROCESSING: ["SHIPPED", "CANCELLED"],
+  PROCESSING: ["SHIPPED"],
 
   SHIPPED: ["DELIVERED"],
 
@@ -166,13 +166,6 @@ export default function AdminOrderStatus({ orderId, currentStatus }: Props) {
               </Button>
             </div>
 
-            {status === "CANCELLED" ? (
-              <div className="mt-3 rounded-lg bg-red-50 px-3 py-2">
-                <p className="text-[10px] leading-4 text-red-600">
-                  Cancelling this order will restore available product stock.
-                </p>
-              </div>
-            ) : null}
           </div>
         ) : (
           <div className="mt-4 border-t border-gray-100 pt-4">

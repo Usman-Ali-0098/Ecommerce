@@ -14,7 +14,6 @@ import {
   Menu,
   Package,
   ShoppingBag,
-  UserRound,
   X,
 } from "lucide-react";
 
@@ -54,7 +53,7 @@ async function fetchCartCount() {
 // FETCH NOTIFICATION COUNT
 
 async function fetchNotificationCount() {
-  const response = await fetch("/api/notifications?limit=1", {
+  const response = await fetch("/api/notifications/count", {
     cache: "no-store",
   });
 
@@ -66,7 +65,7 @@ async function fetchNotificationCount() {
 
   const result = await response.json();
 
-  return Number(result.data?.unreadCount) || 0;
+  return Number(result.unreadCount) || 0;
 }
 
 export default function SiteHeader() {
@@ -236,33 +235,7 @@ export default function SiteHeader() {
 
   const initial = fullName.trim().charAt(0).toUpperCase() || "U";
 
-  /*
-   * --------------------------------
-   * ADMIN LOGIN
-   * --------------------------------
-   *
-   * Customer session is cleared
-   * before going to the shared login
-   * page for admin authentication.
-   */
-
-  async function handleAdminLogin() {
-    setAccountOpen(false);
-
-    setNotificationsOpen(false);
-
-    await signOut({
-      redirect: false,
-    });
-
-    window.location.href = "/login";
-  }
-
-  /*
-   * --------------------------------
-   * CUSTOMER LOGOUT
-   * --------------------------------
-   */
+  //  CUSTOMER LOGOUT
 
   async function handleLogout() {
     setAccountOpen(false);
@@ -274,11 +247,7 @@ export default function SiteHeader() {
     });
   }
 
-  /*
-   * --------------------------------
-   * UI
-   * --------------------------------
-   */
+  // UI;
 
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">

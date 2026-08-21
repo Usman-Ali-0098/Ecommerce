@@ -442,7 +442,7 @@ function VariantsPanel({ product }: { product: AdminProduct }) {
 
                 <td className="px-4 py-2.5">
                   <span className="whitespace-nowrap text-xs font-medium text-gray-700">
-                    Rs. {variant.price.toLocaleString("en-PK")}
+                    Rs. {Math.round(variant.price).toLocaleString("en-PK")}
                   </span>
                 </td>
 
@@ -466,16 +466,16 @@ function ProductPrice({ min, max }: { min: number; max: number }) {
   if (min === max) {
     return (
       <span className="whitespace-nowrap text-xs font-medium text-gray-800">
-        Rs. {min.toLocaleString("en-PK")}
+        Rs. {Math.round(min).toLocaleString("en-PK")}
       </span>
     );
   }
 
   return (
     <span className="whitespace-nowrap text-xs font-medium text-gray-800">
-      Rs. {min.toLocaleString("en-PK")}
+      Rs. {Math.round(min).toLocaleString("en-PK")}
       {" - "}
-      Rs. {max.toLocaleString("en-PK")}
+      Rs. {Math.round(max).toLocaleString("en-PK")}
     </span>
   );
 }

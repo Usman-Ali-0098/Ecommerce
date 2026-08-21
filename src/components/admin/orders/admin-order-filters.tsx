@@ -1,111 +1,55 @@
 "use client";
 
-import {
-  useState,
-  type FormEvent,
-} from "react";
+import { useState, type FormEvent } from "react";
 
-import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type Props = {
   initialSearch: string;
   initialStatus: string;
 };
 
-const statuses = [
-  "PENDING",
-  "PROCESSING",
-  "SHIPPED",
-  "DELIVERED",
-  "CANCELLED",
-];
+const statuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
 
 export default function AdminOrderFilters({
   initialSearch,
   initialStatus,
 }: Props) {
-  const router =
-    useRouter();
+  const router = useRouter();
 
-  const searchParams =
-    useSearchParams();
+  const searchParams = useSearchParams();
 
-  const [
-    search,
-    setSearch,
-  ] = useState(
-    initialSearch
-  );
+  const [search, setSearch] = useState(initialSearch);
 
-  function updateUrl(
-    updates: {
-      search?: string;
-      status?: string;
-    }
-  ) {
-    const params =
-      new URLSearchParams(
-        searchParams.toString()
-      );
+  function updateUrl(updates: { search?: string; status?: string }) {
+    const params = new URLSearchParams(searchParams.toString());
 
-    if (
-      updates.search !==
-      undefined
-    ) {
-      const value =
-        updates.search.trim();
+    if (updates.search !== undefined) {
+      const value = updates.search.trim();
 
       if (value) {
-        params.set(
-          "search",
-          value
-        );
+        params.set("search", value);
       } else {
-        params.delete(
-          "search"
-        );
+        params.delete("search");
       }
     }
 
-    if (
-      updates.status !==
-      undefined
-    ) {
-      if (
-        updates.status
-      ) {
-        params.set(
-          "status",
-          updates.status
-        );
+    if (updates.status !== undefined) {
+      if (updates.status) {
+        params.set("status", updates.status);
       } else {
-        params.delete(
-          "status"
-        );
+        params.delete("status");
       }
     }
 
-    params.delete(
-      "page"
-    );
+    params.delete("page");
 
-    const query =
-      params.toString();
+    const query = params.toString();
 
-    router.push(
-      query
-        ? `/admin/orders?${query}`
-        : "/admin/orders"
-    );
+    router.push(query ? `/admin/orders?${query}` : "/admin/orders");
   }
 
-  function handleSubmit(
-    event:
-      FormEvent<HTMLFormElement>
-  ) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     updateUrl({
@@ -116,41 +60,23 @@ export default function AdminOrderFilters({
   function handleClear() {
     setSearch("");
 
-    router.push(
-      "/admin/orders"
-    );
+    router.push("/admin/orders");
   }
 
-  const hasFilters =
-    Boolean(
-      initialSearch ||
-      initialStatus
-    );
+  const hasFilters = Boolean(initialSearch || initialStatus);
 
   return (
     <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
       {/* Search */}
 
-      <form
-        onSubmit={
-          handleSubmit
-        }
-        className="flex min-w-0 flex-1 gap-2"
-      >
+      <form onSubmit={handleSubmit} className="flex min-w-0 flex-1 gap-2">
         <div className="relative min-w-0 flex-1">
           <SearchIcon />
 
           <input
             type="search"
             value={search}
-            onChange={(
-              event
-            ) =>
-              setSearch(
-                event.target
-                  .value
-              )
-            }
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Search order, customer or email..."
             className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
@@ -167,44 +93,23 @@ export default function AdminOrderFilters({
       {/* Status */}
 
       <div className="flex items-center gap-2">
-        <div className="relative min-w-[175px] flex-1 lg:flex-none">
+        <div className="relative min-w-43.75 flex-1 lg:flex-none">
           <select
-            value={
-              initialStatus
-            }
-            onChange={(
-              event
-            ) =>
+            value={initialStatus}
+            onChange={(event) =>
               updateUrl({
-                status:
-                  event.target
-                    .value,
+                status: event.target.value,
               })
             }
             className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-9 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            <option value="">
-              All Statuses
-            </option>
+            <option value="">All Statuses</option>
 
-            {statuses.map(
-              (status) => (
-                <option
-                  key={
-                    status
-                  }
-                  value={
-                    status
-                  }
-                >
-                  {
-                    formatStatus(
-                      status
-                    )
-                  }
-                </option>
-              )
-            )}
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {formatStatus(status)}
+              </option>
+            ))}
           </select>
 
           <SelectArrowIcon />
@@ -213,9 +118,7 @@ export default function AdminOrderFilters({
         {hasFilters ? (
           <button
             type="button"
-            onClick={
-              handleClear
-            }
+            onClick={handleClear}
             className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
           >
             Clear
@@ -226,16 +129,8 @@ export default function AdminOrderFilters({
   );
 }
 
-function formatStatus(
-  status: string
-) {
-  return status
-    .toLowerCase()
-    .replace(
-      /^\w/,
-      (letter) =>
-        letter.toUpperCase()
-    );
+function formatStatus(status: string) {
+  return status.toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function SearchIcon() {

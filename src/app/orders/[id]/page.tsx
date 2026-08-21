@@ -219,10 +219,7 @@ function OrderMeta({
 }
 
 function formatMoney(amount: number) {
-  return `Rs. ${amount.toLocaleString("en-PK", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `Rs. ${Math.round(amount).toLocaleString("en-PK")}`;
 }
 
 function formatDate(date: Date) {
