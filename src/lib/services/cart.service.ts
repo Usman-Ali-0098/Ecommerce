@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolveProductImage } from "@/lib/product-image";
 
 export async function getUserCart(userId: number) {
   const cart = await prisma.cart.findUnique({
@@ -46,10 +47,12 @@ export async function getUserCart(userId: number) {
   const items = cart.items.map((item) => {
     const product = item.variant.product;
 
-    const primaryImage =
-      product.images.find((image) => image.isPrimary) ??
-      product.images[0] ??
-      null;
+    const primaryImage = resolveProductImage({
+      images: product.images,
+      colorId: item.variant.colorId,
+      variantImageUrl: item.variant.imageUrl,
+      fallbackAltText: product.name,
+    });
 
     const unitPrice = Number(item.variant.price);
 

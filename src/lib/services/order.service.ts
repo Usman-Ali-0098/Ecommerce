@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolveProductImage } from "@/lib/product-image";
 
 const TAX_RATE = 0.1;
 
@@ -152,16 +153,9 @@ export async function getUserOrderById(userId: number, orderId: string) {
               product: {
                 include: {
                   images: {
-                    orderBy: [
-                      {
-                        isPrimary: "desc",
-                      },
-                      {
-                        position: "asc",
-                      },
-                    ],
-
-                    take: 1,
+                    orderBy: {
+                      position: "asc",
+                    },
                   },
                 },
               },
@@ -203,7 +197,20 @@ export async function getUserOrderById(userId: number, orderId: string) {
     productCount,
 
     items: order.items.map((item) => {
-      const image = item.variant?.product.images[0];
+      const currentImage = item.variant
+        ? resolveProductImage({
+            images: item.variant.product.images,
+            colorId: item.variant.colorId,
+            variantImageUrl: item.variant.imageUrl,
+            fallbackAltText: item.productName,
+          })
+        : null;
+      const image = item.imageUrl
+        ? {
+            url: item.imageUrl,
+            altText: item.imageAltText,
+          }
+        : currentImage;
 
       return {
         id: item.id,
@@ -237,8 +244,9 @@ export async function getUserOrderById(userId: number, orderId: string) {
 export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
   const orderNumber = createOrderNumber();
 
-  const order = await prisma.$transaction(async (tx) => {
-    const cartItems = await tx.cartItem.findMany({
+  const order = await prisma.$transaction(
+    async (tx) => {
+      const cartItems = await tx.cartItem.findMany({
       where: {
         id: {
           in: cartItemIds,
@@ -258,6 +266,11 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
             product: {
               include: {
                 category: true,
+                images: {
+                  orderBy: {
+                    position: "asc",
+                  },
+                },
               },
             },
           },
@@ -374,6 +387,12 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
         const product = variant.product;
 
         const unitPrice = Number(variant.price);
+        const image = resolveProductImage({
+          images: product.images,
+          colorId: variant.colorId,
+          variantImageUrl: variant.imageUrl,
+          fallbackAltText: product.name,
+        });
 
         return {
           orderId: newOrder.id,
@@ -387,6 +406,10 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
           colorName: variant.color?.name ?? null,
 
           sizeName: variant.size?.name ?? null,
+
+          imageUrl: image?.url ?? null,
+
+          imageAltText: image?.altText ?? product.name,
 
           unitPrice,
 
@@ -444,8 +467,13 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
       );
     }
 
-    return newOrder;
-  });
+      return newOrder;
+    },
+    {
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  );
 
   return {
     id: order.id,

@@ -18,7 +18,7 @@ import { notifyCartUpdated } from "@/lib/cart-events";
 
 import { notifyNotificationUpdated } from "@/lib/notification-events";
 
-import type { CartData } from "@/types/cart";
+import type { CartData, CartItemData } from "@/types/cart";
 
 type CartClientProps = {
   cart: CartData;
@@ -44,14 +44,30 @@ type PlaceOrderResponse = {
   };
 };
 
+type UpdateQuantityResponse = {
+  success: boolean;
+  message?: string;
+  data?: {
+    id: string;
+    quantity: number;
+    stock: number;
+    unitPrice: number;
+    lineTotal: number;
+  };
+};
+
 export default function CartClient({ cart }: CartClientProps) {
   const router = useRouter();
 
   const { alert, showAlert, closeAlert } = useAlert();
 
+  const [displayedItems, setDisplayedItems] = useState<CartItemData[]>(
+    cart.items,
+  );
+
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
-  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  const [updatingItemIds, setUpdatingItemIds] = useState<string[]>([]);
 
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
@@ -72,8 +88,9 @@ export default function CartClient({ cart }: CartClientProps) {
   // SELECTED CART ITEMS
 
   const selectedItems = useMemo(
-    () => cart.items.filter((item) => selectedItemIds.includes(item.id)),
-    [cart.items, selectedItemIds],
+    () =>
+      displayedItems.filter((item) => selectedItemIds.includes(item.id)),
+    [displayedItems, selectedItemIds],
   );
 
   const selectedSubtotal = useMemo(
@@ -82,7 +99,7 @@ export default function CartClient({ cart }: CartClientProps) {
   );
 
   const allSelected =
-    cart.items.length > 0 && selectedItemIds.length === cart.items.length;
+    displayedItems.length > 0 && selectedItemIds.length === displayedItems.length;
 
   // SELECTION
 
@@ -103,18 +120,39 @@ export default function CartClient({ cart }: CartClientProps) {
       return;
     }
 
-    setSelectedItemIds(cart.items.map((item) => item.id));
+    setSelectedItemIds(displayedItems.map((item) => item.id));
   }
 
   // UPDATE QUANTITY
 
   async function updateQuantity(itemId: string, quantity: number) {
-    if (quantity < 1) {
+    if (quantity < 1 || updatingItemIds.includes(itemId)) {
       return;
     }
 
+    const confirmedItem = displayedItems.find((item) => item.id === itemId);
+
+    if (!confirmedItem || quantity > confirmedItem.variant.stock) {
+      return;
+    }
+
+    const confirmedQuantity = confirmedItem.quantity;
+    const confirmedLineTotal = confirmedItem.lineTotal;
+
+    setDisplayedItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              quantity,
+              lineTotal: item.variant.price * quantity,
+            }
+          : item,
+      ),
+    );
+
     try {
-      setUpdatingItemId(itemId);
+      setUpdatingItemIds((current) => [...current, itemId]);
 
       const response = await fetch(`/api/cart/items/${itemId}`, {
         method: "PATCH",
@@ -128,31 +166,71 @@ export default function CartClient({ cart }: CartClientProps) {
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as UpdateQuantityResponse;
 
-      if (!response.ok) {
+      if (!response.ok || !result.success || !result.data) {
+        setDisplayedItems((current) =>
+          current.map((item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  quantity: confirmedQuantity,
+                  lineTotal: confirmedLineTotal,
+                }
+              : item,
+          ),
+        );
+
         showAlert(result.message ?? "Unable to update quantity.", {
           variant: "error",
         });
 
+        // Re-read current stock when the server rejects a stale quantity.
+        router.refresh();
+
         return;
       }
+
+      setDisplayedItems((current) =>
+        current.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                quantity: result.data!.quantity,
+                lineTotal: result.data!.lineTotal,
+                variant: {
+                  ...item.variant,
+                  price: result.data!.unitPrice,
+                  stock: result.data!.stock,
+                },
+              }
+            : item,
+        ),
+      );
 
       showAlert(result.message ?? "Cart quantity updated.", {
         variant: "success",
       });
-
-      notifyCartUpdated();
-
-      router.refresh();
     } catch (error) {
       console.error("Update quantity error:", error);
+
+      setDisplayedItems((current) =>
+        current.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                quantity: confirmedQuantity,
+                lineTotal: confirmedLineTotal,
+              }
+            : item,
+        ),
+      );
 
       showAlert("Something went wrong while updating quantity.", {
         variant: "error",
       });
     } finally {
-      setUpdatingItemId(null);
+      setUpdatingItemIds((current) => current.filter((id) => id !== itemId));
     }
   }
 
@@ -301,10 +379,10 @@ export default function CartClient({ cart }: CartClientProps) {
   return (
     <>
       <CartTable
-        cart={cart}
+        items={displayedItems}
         selectedItemIds={selectedItemIds}
         allSelected={allSelected}
-        updatingItemId={updatingItemId}
+        updatingItemIds={updatingItemIds}
         deletingItemId={deletingItemId}
         onToggleItem={toggleItem}
         onToggleAll={toggleAll}

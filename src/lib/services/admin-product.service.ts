@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolveProductImage } from "@/lib/product-image";
 
 type GetAdminProductsParams = {
   search?: string;
@@ -172,8 +173,16 @@ export async function getAdminProducts({
       activeVariantCount: product.variants.filter((variant) => variant.isActive)
         .length,
 
-      variants: product.variants.map((variant) => ({
-        id: variant.id,
+      variants: product.variants.map((variant) => {
+        const image = resolveProductImage({
+          images: product.images,
+          colorId: variant.color?.id,
+          variantImageUrl: variant.imageUrl,
+          fallbackAltText: `${product.name} - ${variant.sku}`,
+        });
+
+        return {
+          id: variant.id,
 
         sku: variant.sku,
 
@@ -190,7 +199,9 @@ export async function getAdminProducts({
          */
         imageUrl: variant.imageUrl,
 
-        imagePublicId: variant.imagePublicId,
+          imagePublicId: variant.imagePublicId,
+
+          image,
 
         color: variant.color
           ? {
@@ -202,14 +213,15 @@ export async function getAdminProducts({
             }
           : null,
 
-        size: variant.size
-          ? {
-              id: variant.size.id,
+          size: variant.size
+            ? {
+                id: variant.size.id,
 
-              name: variant.size.name,
-            }
-          : null,
-      })),
+                name: variant.size.name,
+              }
+            : null,
+        };
+      }),
 
       createdAt: product.createdAt,
     };

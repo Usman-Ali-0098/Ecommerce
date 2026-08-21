@@ -352,7 +352,12 @@ export async function getAdminOrderById(
               ?.product
               .images ?? [];
 
-          const primaryImage =
+          const primaryImage = item.imageUrl
+            ? {
+                url: item.imageUrl,
+                altText: item.imageAltText,
+              }
+            :
             images.find(
               (image) =>
                 image.isPrimary

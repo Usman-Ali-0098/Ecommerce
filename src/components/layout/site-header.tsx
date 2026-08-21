@@ -33,10 +33,6 @@ const navigation = [
     label: "Home",
     href: "/",
   },
-  {
-    label: "Products",
-    href: "/products",
-  },
 ];
 
 // FETCH CART COUNT

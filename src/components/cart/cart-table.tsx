@@ -1,14 +1,14 @@
-import type { CartData } from "@/types/cart";
+import type { CartItemData } from "@/types/cart";
 
 import CartItemRow from "@/components/cart/cart-item-row";
 
 type CartTableProps = {
-  cart: CartData;
+  items: CartItemData[];
 
   selectedItemIds: string[];
   allSelected: boolean;
 
-  updatingItemId: string | null;
+  updatingItemIds: string[];
 
   deletingItemId: string | null;
 
@@ -22,10 +22,10 @@ type CartTableProps = {
 };
 
 export default function CartTable({
-  cart,
+  items,
   selectedItemIds,
   allSelected,
-  updatingItemId,
+  updatingItemIds,
   deletingItemId,
   onToggleItem,
   onToggleAll,
@@ -66,12 +66,12 @@ export default function CartTable({
         </thead>
 
         <tbody>
-          {cart.items.map((item) => (
+          {items.map((item) => (
             <CartItemRow
               key={item.id}
               item={item}
               selected={selectedItemIds.includes(item.id)}
-              isUpdating={updatingItemId === item.id}
+              isUpdating={updatingItemIds.includes(item.id)}
               isDeleting={deletingItemId === item.id}
               onToggle={() => onToggleItem(item.id)}
               onDecrease={() => onUpdateQuantity(item.id, item.quantity - 1)}

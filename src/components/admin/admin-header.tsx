@@ -66,6 +66,14 @@ type AdminNotificationsResponse = {
   };
 };
 
+type AdminNotificationCountResponse = {
+  success: boolean;
+  unreadCount: number;
+};
+
+const NOTIFICATION_POLL_INTERVAL = 60_000;
+const NOTIFICATION_REQUEST_TIMEOUT = 20_000;
+
 /*
  * --------------------------------
  * FETCH ADMIN NOTIFICATIONS
@@ -107,6 +115,28 @@ async function fetchAdminNotifications() {
   }
 
   return result.data;
+}
+
+async function fetchAdminNotificationCount(signal?: AbortSignal) {
+  const response = await fetch("/api/admin/notifications/count", {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to load admin notification count. Status: ${response.status}`,
+    );
+  }
+
+  const result = (await response.json()) as AdminNotificationCountResponse;
+
+  if (!result.success) {
+    throw new Error("Unable to load admin notification count.");
+  }
+
+  return Number(result.unreadCount) || 0;
 }
 
 export default function AdminHeader({
@@ -247,113 +277,85 @@ export default function AdminHeader({
     }
   }
 
-  /*
-   * --------------------------------
-   * INITIAL LOAD + POLLING
-   * --------------------------------
-   *
-   * Important:
-   * We do not directly call a helper
-   * which synchronously mutates state
-   * from the effect.
-   *
-   * The API function returns data.
-   * State changes happen only after
-   * the asynchronous request resolves.
-   */
-
   useEffect(() => {
-    let cancelled =
-      false;
+    let cancelled = false;
+    let pollTimeout: number | null = null;
+    let controller: AbortController | null = null;
+    let requestSequence = 0;
 
-    void fetchAdminNotifications()
-      .then(
-        (data) => {
-          if (
-            cancelled
-          ) {
-            return;
-          }
+    function clearTimers() {
+      if (pollTimeout !== null) {
+        window.clearTimeout(pollTimeout);
+        pollTimeout = null;
+      }
 
-          setNotifications(
-            data.notifications
-          );
+    }
 
-          setUnreadCount(
-            Number(
-              data.unreadCount
-            ) || 0
-          );
-        }
-      )
-      .catch(
-        (error) => {
-          if (
-            cancelled
-          ) {
-            return;
-          }
+    async function pollUnreadCount() {
+      if (cancelled || document.visibilityState !== "visible") {
+        return;
+      }
 
-          console.error(
-            "Initial admin notifications load error:",
-            error
-          );
-        }
+      const sequence = ++requestSequence;
+      const currentController = new AbortController();
+      controller = currentController;
+      const currentRequestTimeout = window.setTimeout(
+        () => currentController.abort(),
+        NOTIFICATION_REQUEST_TIMEOUT,
       );
 
-    /*
-     * Check periodically for
-     * new orders/cancellations.
-     */
+      try {
+        const count = await fetchAdminNotificationCount(
+          currentController.signal,
+        );
 
-    const interval =
-      window.setInterval(
-        () => {
-          void fetchAdminNotifications()
-            .then(
-              (data) => {
-                if (
-                  cancelled
-                ) {
-                  return;
-                }
+        if (!cancelled) {
+          setUnreadCount(count);
+        }
+      } catch (error) {
+        if (
+          !cancelled &&
+          !(error instanceof Error && error.name === "AbortError")
+        ) {
+          console.error("Admin notification polling error:", error);
+        }
+      } finally {
+        window.clearTimeout(currentRequestTimeout);
 
-                setNotifications(
-                  data.notifications
-                );
+        if (controller === currentController) {
+          controller = null;
+        }
 
-                setUnreadCount(
-                  Number(
-                    data.unreadCount
-                  ) || 0
-                );
-              }
-            )
-            .catch(
-              (error) => {
-                if (
-                  cancelled
-                ) {
-                  return;
-                }
+        if (
+          !cancelled &&
+          sequence === requestSequence &&
+          document.visibilityState === "visible"
+        ) {
+          pollTimeout = window.setTimeout(
+            () => void pollUnreadCount(),
+            NOTIFICATION_POLL_INTERVAL,
+          );
+        }
+      }
+    }
 
-                console.error(
-                  "Admin notification polling error:",
-                  error
-                );
-              }
-            );
-        },
-        30000
-      );
+    function handleVisibilityChange() {
+      clearTimers();
+      controller?.abort();
+
+      if (document.visibilityState === "visible") {
+        void pollUnreadCount();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    void pollUnreadCount();
 
     return () => {
-      cancelled =
-        true;
-
-      window.clearInterval(
-        interval
-      );
+      cancelled = true;
+      clearTimers();
+      controller?.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

@@ -22,7 +22,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-   accounts Account[]
+  accounts Account[]
 
   passwordResetTokens PasswordResetToken[]
 
@@ -36,11 +36,9 @@ enum Role {
   ADMIN
 }
 
-
-
 model Account {
-  id                String @id @default(cuid())
-  userId            Int
+  id     String @id @default(cuid())
+  userId Int
 
   type              String
   provider          String
@@ -58,13 +56,11 @@ model Account {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId],references: [id],  onDelete: Cascade )
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
-
-
 
 model PasswordResetToken {
   id        Int       @id @default(autoincrement())
@@ -118,11 +114,12 @@ model Category {
 model ProductImage {
   id        String  @id @default(cuid())
   productId String
+  colorId   String?
   url       String
-    // Stores Cloudinary’s internal resource identifier.
+  // Stores Cloudinary’s internal resource identifier.
   publicId  String?
 
-  altText   String?
+  altText String?
 
   // Why it's used: Sorting and gallery order. Products usually have multiple images (thumbnails, side views, angles). The position field lets you control the exact order in which images appear on the frontend (e.g., 0, 1, 2, 3) so admins can reorder images via drag-and-drop without renaming files or altering database IDs.
   position Int @default(0)
@@ -131,8 +128,10 @@ model ProductImage {
   isPrimary Boolean @default(false)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  color   Color?  @relation(fields: [colorId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  @@index([colorId])
   @@index([productId, position])
 }
 
@@ -143,6 +142,7 @@ model Color {
   isActive Boolean @default(true)
 
   variants ProductVariant[]
+  images   ProductImage[]
 
   @@index([isActive])
 }
@@ -160,16 +160,16 @@ model Size {
 }
 
 model ProductVariant {
-  id        String   @id @default(cuid())
-  productId String
-  colorId   String?
-  sizeId    String?
-  sku       String   @unique
-  price     Decimal  @db.Decimal(10, 2)
-  stock     Int      @default(0)
-  isActive  Boolean  @default(true)
-imageUrl      String?
-imagePublicId String?
+  id            String  @id @default(cuid())
+  productId     String
+  colorId       String?
+  sizeId        String?
+  sku           String  @unique
+  price         Decimal @db.Decimal(10, 2)
+  stock         Int     @default(0)
+  isActive      Boolean @default(true)
+  imageUrl      String?
+  imagePublicId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -229,9 +229,9 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  items         OrderItem[]
-  notifications Notification[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items              OrderItem[]
+  notifications      Notification[]
   adminNotifications AdminNotification[]
 
   @@index([userId])
@@ -244,10 +244,12 @@ model OrderItem {
   orderId   String
   variantId String?
 
-  productName String
-  sku         String
-  colorName   String?
-  sizeName    String?
+  productName  String
+  sku          String
+  colorName    String?
+  sizeName     String?
+  imageUrl     String?
+  imageAltText String?
 
   unitPrice Decimal @db.Decimal(12, 2)
   quantity  Int
@@ -297,14 +299,10 @@ model Notification {
   @@index([orderId])
 }
 
-
-
-
 enum AdminNotificationType {
   NEW_ORDER
   ORDER_CANCELLED
 }
-
 
 model AdminNotification {
   id        String                @id @default(cuid())
@@ -315,7 +313,7 @@ model AdminNotification {
   isRead    Boolean               @default(false)
   createdAt DateTime              @default(now())
 
-  order     Order?                @relation(fields: [orderId],references: [id],onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([isRead])
   @@index([createdAt])

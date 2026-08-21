@@ -266,6 +266,8 @@ function mapPublicProduct(product: ProductWithRelations) {
           isPrimary: primaryImage.isPrimary,
 
           position: primaryImage.position,
+
+          colorId: primaryImage.colorId,
         }
       : null,
 
@@ -283,6 +285,8 @@ function mapPublicProduct(product: ProductWithRelations) {
       isPrimary: image.isPrimary,
 
       position: image.position,
+
+      colorId: image.colorId,
     })),
 
     variants,

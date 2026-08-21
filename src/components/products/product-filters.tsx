@@ -23,7 +23,9 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
 
   const currentSort = searchParams.get("sort") ?? "newest";
 
-  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const currentSearch = searchParams.get("search") ?? "";
+
+  const [search, setSearch] = useState(currentSearch);
 
   function updateParams(key: string, value?: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -45,6 +47,14 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
     event.preventDefault();
 
     updateParams("search", search.trim() || undefined);
+  }
+
+  function handleSearchChange(value: string) {
+    setSearch(value);
+
+    if (!value && currentSearch) {
+      updateParams("search");
+    }
   }
 
   return (
@@ -76,7 +86,7 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
         <input
           type="search"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => handleSearchChange(event.target.value)}
           placeholder="Search products..."
           className="h-9 w-full min-w-0 rounded-md border border-[#d8dee8] bg-white pl-3 pr-9 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-[#087ff5]"
         />

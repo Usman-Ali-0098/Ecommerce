@@ -101,6 +101,7 @@ export default async function AdminProductsPage({
 
       <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm shadow-gray-100/50">
         <AdminProductFilters
+          key={`${search}:${category}`}
           categories={
             categories
           }

@@ -138,6 +138,8 @@ export default async function EditAdminProductPage({ params }: PageProps) {
 
           publicId: image.publicId,
 
+          colorId: image.colorId,
+
           isPrimary: image.isPrimary,
 
           position: image.position,

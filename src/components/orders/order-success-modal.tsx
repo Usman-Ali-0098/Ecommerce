@@ -22,12 +22,12 @@ export default function OrderSuccessModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-100 flex items-center justify-center bg-black/45 px-4 backdrop-blur-[1px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="order-success-title"
     >
-      <div className="w-full max-w-[360px] rounded-xl border border-gray-200 bg-white px-6 py-7 shadow-2xl">
+      <div className="w-full max-w-90 rounded-xl border border-gray-200 bg-white px-6 py-7 shadow-2xl">
         {/* Success Icon */}
 
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">

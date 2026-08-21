@@ -113,6 +113,21 @@ export default function AdminProductFilters({
     });
   }
 
+  function handleSearchChange(
+    value: string
+  ) {
+    setSearch(value);
+
+    if (
+      !value &&
+      initialSearch
+    ) {
+      updateUrl({
+        search: "",
+      });
+    }
+  }
+
   function handleClear() {
     setSearch("");
 
@@ -146,7 +161,7 @@ export default function AdminProductFilters({
             onChange={(
               event
             ) =>
-              setSearch(
+              handleSearchChange(
                 event.target
                   .value
               )

@@ -25,6 +25,7 @@ type ImageInput =
   | {
       source: "existing";
       id: string;
+      colorId: string | null;
       position: number;
       isPrimary: boolean;
     }
@@ -32,6 +33,7 @@ type ImageInput =
       source: "new";
       url: string;
       publicId: string;
+      colorId: string | null;
       position: number;
       isPrimary: boolean;
     };
@@ -118,6 +120,10 @@ function normalizeImages(value: unknown): ImageInput[] {
         : index;
 
     const isPrimary = rawImage?.isPrimary === true;
+    const colorId =
+      typeof rawImage?.colorId === "string" && rawImage.colorId.trim()
+        ? rawImage.colorId.trim()
+        : null;
 
     if (source === "existing") {
       const id = typeof rawImage?.id === "string" ? rawImage.id.trim() : "";
@@ -129,6 +135,7 @@ function normalizeImages(value: unknown): ImageInput[] {
       return {
         source: "existing",
         id,
+        colorId,
         position,
         isPrimary,
       };
@@ -148,6 +155,7 @@ function normalizeImages(value: unknown): ImageInput[] {
         source: "new",
         url,
         publicId,
+        colorId,
         position,
         isPrimary,
       };
@@ -286,6 +294,22 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const images = normalizeImages(body?.images);
     const variants = normalizeVariants(body?.variants);
 
+    const variantColorIds = new Set(
+      variants
+        .map((variant) => variant.colorId)
+        .filter((value): value is string => value !== null),
+    );
+
+    if (
+      images.some(
+        (image) => image.colorId && !variantColorIds.has(image.colorId),
+      )
+    ) {
+      throw new RouteError(
+        "Every color-specific image must match a product variant color.",
+      );
+    }
+
     /*
      * Newly-uploaded base product images.
      */
@@ -383,8 +407,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
     const colorIds = [
       ...new Set(
-        variants
-          .map((variant) => variant.colorId)
+        [...variants.map((variant) => variant.colorId), ...images.map((image) => image.colorId)]
           .filter((value): value is string => value !== null),
       ),
     ];
@@ -570,6 +593,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
             where: { id: image.id },
             data: {
               altText: name,
+              colorId: image.colorId,
               position: image.position,
               isPrimary: image.isPrimary,
             },
@@ -580,6 +604,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
               productId: id,
               url: image.url,
               publicId: image.publicId,
+              colorId: image.colorId,
               altText: name,
               position: image.position,
               isPrimary: image.isPrimary,

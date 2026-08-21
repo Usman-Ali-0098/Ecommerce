@@ -61,6 +61,7 @@ type InitialImage = {
   publicId: string | null;
   isPrimary: boolean;
   position: number;
+  colorId: string | null;
 };
 
 type ProductInitialData = {
@@ -113,6 +114,7 @@ type SelectedImage = {
   id: string;
   file: File;
   previewUrl: string;
+  colorId: string | null;
 };
 
 type SelectedVariantImage = {
@@ -387,6 +389,7 @@ export default function AdminProductForm({
         id: crypto.randomUUID(),
         file,
         previewUrl,
+        colorId: null,
       };
     });
 
@@ -1180,12 +1183,16 @@ export default function AdminProductForm({
           source: "existing" as const,
           url: image.url,
           publicId: image.publicId,
+          colorId: image.colorId,
           isPrimary: primaryImageKey === `existing:${image.id}`,
         })),
         ...uploadedImages.map((image) => ({
           source: "new" as const,
           url: image.url,
           publicId: image.publicId,
+          colorId:
+            selectedImages.find((selected) => selected.id === image.localId)
+              ?.colorId ?? null,
           isPrimary: primaryImageKey === `new:${image.localId}`,
         })),
       ].map((image, position) => ({
@@ -1346,6 +1353,31 @@ export default function AdminProductForm({
                           <X size={14} />
                         </button>
 
+                        <select
+                          value={image.colorId ?? ""}
+                          onChange={(event) =>
+                            setExistingImages((current) =>
+                              current.map((item) =>
+                                item.id === image.id
+                                  ? {
+                                      ...item,
+                                      colorId: event.target.value || null,
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="h-8 w-full border-t border-gray-200 bg-white px-2 text-[10px] text-gray-600 outline-none focus:border-blue-400"
+                          aria-label="Image color"
+                        >
+                          <option value="">General image</option>
+                          {colorOptions.map((color) => (
+                            <option key={color.id} value={color.id}>
+                              {color.name}
+                            </option>
+                          ))}
+                        </select>
+
                         <button
                           type="button"
                           onClick={() => setPrimaryImageKey(key)}
@@ -1398,6 +1430,31 @@ export default function AdminProductForm({
                         >
                           <X size={14} />
                         </button>
+
+                        <select
+                          value={image.colorId ?? ""}
+                          onChange={(event) =>
+                            setSelectedImages((current) =>
+                              current.map((item) =>
+                                item.id === image.id
+                                  ? {
+                                      ...item,
+                                      colorId: event.target.value || null,
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          className="h-8 w-full border-t border-gray-200 bg-white px-2 text-[10px] text-gray-600 outline-none focus:border-blue-400"
+                          aria-label="Image color"
+                        >
+                          <option value="">General image</option>
+                          {colorOptions.map((color) => (
+                            <option key={color.id} value={color.id}>
+                              {color.name}
+                            </option>
+                          ))}
+                        </select>
 
                         <button
                           type="button"

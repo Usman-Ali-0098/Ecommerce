@@ -89,7 +89,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </h2>
 
             <div className="w-full min-w-0 lg:ml-auto lg:w-auto">
-              <ProductFilters categories={categories} />
+              <ProductFilters
+                key={`filters:${productsKey}`}
+                categories={categories}
+              />
             </div>
           </div>
 

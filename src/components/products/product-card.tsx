@@ -61,9 +61,20 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   //  STATE
 
-  const [selectedSizeId, setSelectedSizeId] = useState("");
+  const initialVariant = product.image?.colorId
+    ? product.variants.find(
+        (variant) =>
+          variant.color?.id === product.image?.colorId && variant.stock > 0,
+      )
+    : undefined;
 
-  const [selectedColorId, setSelectedColorId] = useState("");
+  const [selectedSizeId, setSelectedSizeId] = useState(
+    initialVariant?.size?.id ?? "",
+  );
+
+  const [selectedColorId, setSelectedColorId] = useState(
+    initialVariant?.color?.id ?? "",
+  );
 
   const [quantity, setQuantity] = useState(1);
 
@@ -75,17 +86,24 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const [isImageHovered, setIsImageHovered] = useState(false);
 
+  const generalImages = product.images.filter((image) => !image.colorId);
+  const baseImages = generalImages.length > 0 ? generalImages : product.images;
+  const colorImages = selectedColorId
+    ? product.images.filter((image) => image.colorId === selectedColorId)
+    : [];
+  const activeImages = colorImages.length > 0 ? colorImages : baseImages;
+
   // Change image every2s
 
   useEffect(() => {
-    if (!isImageHovered || product.images.length <= 1) {
+    if (!isImageHovered || activeImages.length <= 1) {
       return;
     }
 
     const interval = window.setInterval(
       () => {
         setCurrentImageIndex(
-          (current) => (current + 1) % product.images.length,
+          (current) => (current + 1) % activeImages.length,
         );
       },
 
@@ -95,14 +113,14 @@ export default function ProductCard({ product }: ProductCardProps) {
     return () => {
       window.clearInterval(interval);
     };
-  }, [isImageHovered, product.images.length]);
+  }, [activeImages.length, isImageHovered]);
 
   /*
    * Immediately show second
    * image when hover begins.
    */
   function handleImageMouseEnter() {
-    if (selectedVariantImageUrl || product.images.length <= 1) {
+    if (selectedVariantImageUrl || activeImages.length <= 1) {
       return;
     }
 
@@ -118,7 +136,7 @@ export default function ProductCard({ product }: ProductCardProps) {
   }
 
   const currentProductImage =
-    product.images[currentImageIndex] ?? product.image;
+    activeImages[currentImageIndex] ?? product.image;
 
   //  SELECTED VARIANT by user
 
@@ -144,11 +162,7 @@ export default function ProductCard({ product }: ProductCardProps) {
     return product.variants.some((variant) => {
       const colorMatches = variant.color?.id === colorId;
 
-      const sizeMatches =
-        !selectedSizeId ||
-        (variant.size ? variant.size.id === selectedSizeId : false);
-
-      return colorMatches && sizeMatches && variant.stock > 0;
+      return colorMatches && variant.stock > 0;
     });
   }
 
@@ -185,6 +199,10 @@ export default function ProductCard({ product }: ProductCardProps) {
     }
 
     if (!selectedColorId) {
+      return null;
+    }
+
+    if (colorImages.length > 0) {
       return null;
     }
 
@@ -327,9 +345,9 @@ export default function ProductCard({ product }: ProductCardProps) {
 
         {/* Image Indicators */}
 
-        {!selectedVariantImageUrl && product.images.length > 1 ? (
+        {!selectedVariantImageUrl && activeImages.length > 1 ? (
           <div className="pointer-events-none absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            {product.images.map((image, index) => (
+            {activeImages.map((image, index) => (
               <span
                 key={image.id}
                 className={`h-1.5 rounded-full shadow-sm transition-all duration-200 ${
@@ -407,6 +425,31 @@ export default function ProductCard({ product }: ProductCardProps) {
                           selectedColorId === color.id ? "" : color.id;
 
                         setSelectedColorId(nextColorId);
+                        setCurrentImageIndex(0);
+
+                        if (!nextColorId) {
+                          setSelectedSizeId("");
+                        } else {
+                          const availableVariants = product.variants.filter(
+                            (variant) =>
+                              variant.color?.id === nextColorId &&
+                              variant.stock > 0,
+                          );
+                          const currentSizeStillAvailable =
+                            availableVariants.some(
+                              (variant) =>
+                                variant.size?.id === selectedSizeId,
+                            );
+
+                          if (!currentSizeStillAvailable) {
+                            setSelectedSizeId(
+                              availableVariants.length === 1
+                                ? (availableVariants[0].size?.id ?? "")
+                                : "",
+                            );
+                          }
+                        }
+
                         setQuantity(1);
                       }}
                       disabled={!available && !selected}

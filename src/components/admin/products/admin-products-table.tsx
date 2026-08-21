@@ -386,21 +386,16 @@ function VariantsPanel({ product }: { product: AdminProduct }) {
               >
                 <td className="px-4 py-2.5">
                   <div className="relative h-9 w-9 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
-                    {variant.imageUrl ? (
+                    {variant.image ? (
                       <Image
-                        src={variant.imageUrl}
-                        alt={`${product.name} - ${variant.sku}`}
+                        src={variant.image.url}
+                        alt={
+                          variant.image.altText ??
+                          `${product.name} - ${variant.sku}`
+                        }
                         fill
                         sizes="36px"
                         className="object-cover"
-                      />
-                    ) : product.image ? (
-                      <Image
-                        src={product.image.url}
-                        alt={`${product.name} - base image`}
-                        fill
-                        sizes="36px"
-                        className="object-cover opacity-70"
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">

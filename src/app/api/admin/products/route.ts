@@ -18,6 +18,7 @@ type ImageInput = {
   source: "new";
   url: string;
   publicId: string;
+  colorId: string | null;
   position: number;
   isPrimary: boolean;
 };
@@ -92,6 +93,10 @@ function normalizeImages(value: unknown): ImageInput[] {
     const url = typeof rawImage?.url === "string" ? rawImage.url.trim() : "";
     const publicId =
       typeof rawImage?.publicId === "string" ? rawImage.publicId.trim() : "";
+    const colorId =
+      typeof rawImage?.colorId === "string" && rawImage.colorId.trim()
+        ? rawImage.colorId.trim()
+        : null;
     const position = Number(rawImage?.position);
     const isPrimary = rawImage?.isPrimary === true;
 
@@ -103,6 +108,7 @@ function normalizeImages(value: unknown): ImageInput[] {
       source: "new",
       url,
       publicId,
+      colorId,
       position: Number.isInteger(position) && position >= 0 ? position : index,
       isPrimary,
     };
@@ -210,6 +216,22 @@ export async function POST(request: Request) {
     const images = normalizeImages(body?.images);
     const variants = normalizeVariants(body?.variants);
 
+    const variantColorIds = new Set(
+      variants
+        .map((variant) => variant.colorId)
+        .filter((value): value is string => value !== null),
+    );
+
+    if (
+      images.some(
+        (image) => image.colorId && !variantColorIds.has(image.colorId),
+      )
+    ) {
+      throw new RouteError(
+        "Every color-specific image must match a product variant color.",
+      );
+    }
+
     /*
      * These files have already been uploaded by the admin form.
      * If validation/DB save fails, clean them from Cloudinary.
@@ -265,8 +287,7 @@ export async function POST(request: Request) {
 
     const colorIds = [
       ...new Set(
-        variants
-          .map((variant) => variant.colorId)
+        [...variants.map((variant) => variant.colorId), ...images.map((image) => image.colorId)]
           .filter((id): id is string => id !== null),
       ),
     ];
@@ -327,8 +348,9 @@ export async function POST(request: Request) {
           data: images.map((image, index) => ({
             productId: newProduct.id,
             url: image.url,
-            publicId: image.publicId,
-            altText: name,
+          publicId: image.publicId,
+          colorId: image.colorId,
+          altText: name,
             isPrimary: image.isPrimary,
             position: image.position ?? index,
           })),

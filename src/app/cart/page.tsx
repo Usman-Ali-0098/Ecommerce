@@ -63,7 +63,12 @@ export default async function CartPage() {
               </Link>
             </div>
           ) : (
-            <CartClient cart={cart} />
+            <CartClient
+              key={cart.items
+                .map((item) => `${item.id}:${item.quantity}:${item.variant.stock}`)
+                .join("|")}
+              cart={cart}
+            />
           )}
         </div>
       </main>
