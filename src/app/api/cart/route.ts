@@ -188,6 +188,8 @@ export async function POST(request: Request) {
         message: "Product added to cart.",
         data: {
           cartItem,
+          stock: variant.stock,
+          availableToAdd: Math.max(0, variant.stock - cartItem.quantity),
         },
       },
       {

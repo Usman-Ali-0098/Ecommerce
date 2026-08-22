@@ -79,9 +79,10 @@ export default function ProductCard({ product }: ProductCardProps) {
   //  STATE
 
   const initialVariant = product.image?.colorId
-    ? product.variants.find(
+      ? product.variants.find(
         (variant) =>
-          variant.color?.id === product.image?.colorId && variant.stock > 0,
+          variant.color?.id === product.image?.colorId &&
+          variant.stock > 0,
       )
     : undefined;
 
@@ -94,6 +95,13 @@ export default function ProductCard({ product }: ProductCardProps) {
   );
 
   const [quantity, setQuantity] = useState(1);
+
+  const [cartQuantities, setCartQuantities] = useState<Record<string, number>>(
+    () =>
+      Object.fromEntries(
+        product.variants.map((variant) => [variant.id, variant.cartQuantity]),
+      ),
+  );
 
   const [isAdding, setIsAdding] = useState(false);
 
@@ -167,11 +175,24 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const displayPrice = selectedVariant?.price ?? product.minPrice;
 
-  const availableStock = selectedVariant?.stock ?? product.totalStock;
+  function getAvailableToAdd(variant: PublicProductVariant) {
+    return Math.max(0, variant.stock - (cartQuantities[variant.id] ?? 0));
+  }
+
+  const totalAvailableToAdd = product.variants.reduce(
+    (total, variant) => total + getAvailableToAdd(variant),
+    0,
+  );
+
+  const availableStock = selectedVariant
+    ? getAvailableToAdd(selectedVariant)
+    : totalAvailableToAdd;
 
   const isOutOfStock =
     product.totalStock <= 0 ||
     (selectedVariant ? selectedVariant.stock <= 0 : false);
+
+  const cannotAddMore = availableStock <= 0;
 
   // VARIANT OPTION AVAILABILITY
 
@@ -281,9 +302,9 @@ export default function ProductCard({ product }: ProductCardProps) {
       return;
     }
 
-    if (selectedVariant.stock <= 0) {
-      showAlert("This item is out of stock.", {
-        variant: "error",
+    if (getAvailableToAdd(selectedVariant) <= 0) {
+      showAlert("You already have the maximum available quantity in your cart.", {
+        variant: "warning",
       });
 
       return;
@@ -321,6 +342,15 @@ export default function ProductCard({ product }: ProductCardProps) {
       });
 
       notifyCartUpdated();
+
+      const updatedCartQuantity = Number(result.data?.cartItem?.quantity);
+
+      if (Number.isInteger(updatedCartQuantity)) {
+        setCartQuantities((current) => ({
+          ...current,
+          [selectedVariant.id]: updatedCartQuantity,
+        }));
+      }
 
       setQuantity(1);
     } catch (error) {
@@ -413,7 +443,11 @@ export default function ProductCard({ product }: ProductCardProps) {
               availableStock > 0 ? "text-green-600" : "text-red-500"
             }`}
           >
-            {availableStock > 0 ? `${availableStock} left` : "Out of Stock"}
+            {availableStock > 0
+              ? `${availableStock} available to add`
+              : isOutOfStock
+                ? "Out of Stock"
+                : "Maximum in cart"}
           </span>
         </div>
 
@@ -588,7 +622,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             <button
               type="button"
               onClick={increaseQuantity}
-              disabled={isOutOfStock || quantity >= availableStock}
+              disabled={cannotAddMore || quantity >= availableStock}
               aria-label="Increase quantity"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-r-sm border border-[#d6dde7] text-sm font-light text-[#087ff5] transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-7"
             >
@@ -608,6 +642,8 @@ export default function ProductCard({ product }: ProductCardProps) {
               ? "Adding..."
               : isOutOfStock
                 ? "Out of Stock"
+                : cannotAddMore
+                  ? "Maximum Added to Cart"
                 : "Add to Cart"}
           </button>
         </div>

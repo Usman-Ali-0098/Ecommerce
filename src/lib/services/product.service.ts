@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 export type ProductSort = "newest" | "oldest" | "price-low" | "price-high";
 
 type GetPublicProductsParams = {
+  userId?: number;
   category?: string;
   search?: string;
   sort?: ProductSort;
@@ -44,6 +45,7 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
 
 // main function here
 export async function getPublicProducts({
+  userId,
   category,
   search,
   sort = "newest",
@@ -99,9 +101,12 @@ export async function getPublicProducts({
   //  NEWEST / OLDEST sort
 
   if (sort === "newest" || sort === "oldest") {
-    const orderBy: Prisma.ProductOrderByWithRelationInput = {
-      createdAt: sort === "oldest" ? "asc" : "desc",
-    };
+    const direction = sort === "oldest" ? "asc" : "desc";
+
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] = [
+      { createdAt: direction },
+      { id: direction },
+    ];
 
     const [products, total] = await Promise.all([
       prisma.product.findMany({
@@ -121,8 +126,13 @@ export async function getPublicProducts({
       }),
     ]);
 
+    const publicProducts = await addCartAvailability(
+      products.map(mapPublicProduct),
+      userId,
+    );
+
     return {
-      products: products.map(mapPublicProduct),
+      products: publicProducts,
 
       pagination: {
         page: safePage,
@@ -148,15 +158,18 @@ export async function getPublicProducts({
 
   mappedProducts.sort((a, b) => {
     if (sort === "price-low") {
-      return a.minPrice - b.minPrice;
+      return a.minPrice - b.minPrice || a.id.localeCompare(b.id);
     }
 
-    return b.minPrice - a.minPrice;
+    return b.minPrice - a.minPrice || b.id.localeCompare(a.id);
   });
 
   const total = mappedProducts.length;
 
-  const paginatedProducts = mappedProducts.slice(skip, skip + safePageSize);
+  const paginatedProducts = await addCartAvailability(
+    mappedProducts.slice(skip, skip + safePageSize),
+    userId,
+  );
 
   return {
     products: paginatedProducts,
@@ -171,6 +184,54 @@ export async function getPublicProducts({
       totalPages: Math.ceil(total / safePageSize),
     },
   };
+}
+
+async function addCartAvailability(
+  products: ReturnType<typeof mapPublicProduct>[],
+  userId?: number,
+) {
+  const variantIds = products.flatMap((product) =>
+    product.variants.map((variant) => variant.id),
+  );
+
+  const cartItems =
+    userId && variantIds.length > 0
+      ? await prisma.cartItem.findMany({
+          where: {
+            variantId: { in: variantIds },
+            cart: { userId },
+          },
+          select: {
+            variantId: true,
+            quantity: true,
+          },
+        })
+      : [];
+
+  const cartQuantityByVariant = new Map(
+    cartItems.map((item) => [item.variantId, item.quantity]),
+  );
+
+  return products.map((product) => {
+    const variants = product.variants.map((variant) => {
+      const cartQuantity = cartQuantityByVariant.get(variant.id) ?? 0;
+
+      return {
+        ...variant,
+        cartQuantity,
+        availableToAdd: Math.max(0, variant.stock - cartQuantity),
+      };
+    });
+
+    return {
+      ...product,
+      variants,
+      totalAvailableToAdd: variants.reduce(
+        (total, variant) => total + variant.availableToAdd,
+        0,
+      ),
+    };
+  });
 }
 
 //  MAP PUBLIC PRODUCT

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { auth } from "@/auth";
 import {
   getPublicProducts,
   type ProductSort,
@@ -7,6 +8,7 @@ import {
 
 export async function GET(request: Request) {
   try {
+    const session = await auth();
     const { searchParams } = new URL(request.url);
 
     // FILTERS
@@ -45,6 +47,8 @@ export async function GET(request: Request) {
     // GET PRODUCTS
 
     const result = await getPublicProducts({
+      userId:
+        session?.user?.role === "USER" ? Number(session.user.id) : undefined,
       category,
       search,
       sort,

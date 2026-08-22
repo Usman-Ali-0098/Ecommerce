@@ -17,6 +17,7 @@ type HomePageProps = {
     category?: string;
     search?: string;
     sort?: string;
+    page?: string;
   }>;
 };
 
@@ -45,23 +46,30 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? params.sort
       : "newest";
 
+  const parsedPage = Number(params.page);
+
+  const page =
+    Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+
   /*
    * --------------------------------
    * RESET KEY
    * Whenever category, search, or sort
    * changes, this key changes.
    */
-  const productsKey = [category ?? "all", search ?? "", sort].join(":");
+  const productsKey = [category ?? "all", search ?? "", sort, page].join(":");
 
   // direct extrcting and calling with param
 
   const [{ products, pagination }, categories] = await Promise.all([
     getPublicProducts({
+      userId:
+        session?.user?.role === "USER" ? Number(session.user.id) : undefined,
       category,
       search,
       sort,
 
-      page: 1,
+      page,
 
       pageSize: INITIAL_PAGE_SIZE,
     }),
