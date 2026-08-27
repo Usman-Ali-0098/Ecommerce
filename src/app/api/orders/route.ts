@@ -8,6 +8,11 @@ import {
   getUserOrders,
   OrderServiceError,
 } from "@/lib/services/order.service";
+import { validateRequest } from "@/lib/validate-request";
+import {
+  createOrderSchema,
+  orderListQuerySchema,
+} from "@/lib/validations/order";
 
 export async function GET(request: Request) {
   try {
@@ -47,18 +52,16 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
+    const validation = validateRequest(
+      orderListQuerySchema,
+      Object.fromEntries(searchParams),
+    );
 
-    const parsedPage = Number(searchParams.get("page"));
+    if (!validation.success) {
+      return validation.response;
+    }
 
-    const parsedPageSize = Number(searchParams.get("pageSize"));
-
-    const page =
-      Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-
-    const pageSize =
-      Number.isInteger(parsedPageSize) && parsedPageSize > 0
-        ? Math.min(parsedPageSize, 100)
-        : 20;
+    const { page, pageSize } = validation.data;
 
     const result = await getUserOrders({
       userId: user.id,
@@ -128,41 +131,13 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    const validation = validateRequest(createOrderSchema, body);
 
-    const rawCartItemIds = body?.cartItemIds;
-
-    if (!Array.isArray(rawCartItemIds)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Cart item IDs are required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!validation.success) {
+      return validation.response;
     }
 
-    const cartItemIds = [
-      ...new Set(
-        rawCartItemIds
-          .filter((id): id is string => typeof id === "string")
-          .map((id) => id.trim())
-          .filter((id) => id.length > 0),
-      ),
-    ];
-
-    if (cartItemIds.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Please select at least one cart item.",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
+    const { cartItemIds } = validation.data;
 
     const order = await createOrder({
       userId: user.id,

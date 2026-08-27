@@ -9,6 +9,8 @@ import {
 import {
   getAdminSession,
 } from "@/lib/admin-auth";
+import { validateRequest } from "@/lib/validate-request";
+import { categoryInputSchema } from "@/lib/validations/admin";
 
 export async function POST(
   request: Request
@@ -35,28 +37,16 @@ export async function POST(
       );
     }
 
-    const body =
-      await request.json();
+    const validation = validateRequest(
+      categoryInputSchema,
+      await request.json(),
+    );
 
-    const name =
-      typeof body?.name ===
-      "string"
-        ? body.name.trim()
-        : "";
-
-    if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-
-          message:
-            "Category name is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+    if (!validation.success) {
+      return validation.response;
     }
+
+    const { name } = validation.data;
 
     /*
      * Category names should not

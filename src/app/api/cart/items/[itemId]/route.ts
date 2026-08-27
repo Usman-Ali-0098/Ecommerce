@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/user-auth";
+import { validateRequest } from "@/lib/validate-request";
+import {
+  cartItemParamsSchema,
+  updateCartItemSchema,
+} from "@/lib/validations/cart";
 
 type RouteContext = {
   params: Promise<{
@@ -49,35 +54,26 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const userId = user.id;
 
-    const { itemId } = await context.params;
+    const paramsValidation = validateRequest(
+      cartItemParamsSchema,
+      await context.params,
+    );
 
-    if (!itemId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Cart item ID is required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!paramsValidation.success) {
+      return paramsValidation.response;
     }
 
-    const body = await request.json();
+    const bodyValidation = validateRequest(
+      updateCartItemSchema,
+      await request.json(),
+    );
 
-    const quantity = Number(body.quantity);
-
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Quantity must be at least 1.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!bodyValidation.success) {
+      return bodyValidation.response;
     }
+
+    const { itemId } = paramsValidation.data;
+    const { quantity } = bodyValidation.data;
 
     const cartItem = await prisma.cartItem.findFirst({
       where: {
@@ -253,19 +249,16 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     const userId = user.id;
 
-    const { itemId } = await context.params;
+    const validation = validateRequest(
+      cartItemParamsSchema,
+      await context.params,
+    );
 
-    if (!itemId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Cart item ID is required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!validation.success) {
+      return validation.response;
     }
+
+    const { itemId } = validation.data;
 
     const cartItem = await prisma.cartItem.findFirst({
       where: {

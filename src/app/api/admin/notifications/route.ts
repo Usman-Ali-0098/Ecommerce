@@ -9,6 +9,8 @@ import {
 import {
   prisma,
 } from "@/lib/prisma";
+import { validateRequest } from "@/lib/validate-request";
+import { adminNotificationActionSchema } from "@/lib/validations/admin";
 
 export async function GET() {
   try {
@@ -106,19 +108,16 @@ export async function PATCH(
       );
     }
 
-    const body =
-      await request.json();
+    const validation = validateRequest(
+      adminNotificationActionSchema,
+      await request.json(),
+    );
 
-    const notificationId =
-      typeof body?.notificationId ===
-      "string"
-        ? body.notificationId
-        : "";
+    if (!validation.success) {
+      return validation.response;
+    }
 
-    const markAll =
-      body?.markAll === true;
-
-    if (markAll) {
+    if (validation.data.markAll === true) {
       await prisma.adminNotification.updateMany({
         where: {
           isRead: false,
@@ -136,18 +135,7 @@ export async function PATCH(
       });
     }
 
-    if (!notificationId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Notification ID is required.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
+    const { notificationId } = validation.data;
 
     await prisma.adminNotification.update({
       where: {

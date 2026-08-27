@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
+import { validateRequest } from "@/lib/validate-request";
+import {
+  adminIdParamsSchema,
+  updateColorSchema,
+} from "@/lib/validations/admin";
 
 type RouteContext = {
   params: Promise<{
@@ -25,7 +30,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
       );
     }
 
-    const { id } = await params;
+    const paramsValidation = validateRequest(adminIdParamsSchema, await params);
+
+    if (!paramsValidation.success) {
+      return paramsValidation.response;
+    }
+
+    const { id } = paramsValidation.data;
 
     const existingColor = await prisma.color.findUnique({
       where: {
@@ -45,41 +56,17 @@ export async function PUT(request: Request, { params }: RouteContext) {
       );
     }
 
-    const body = await request.json();
+    const bodyValidation = validateRequest(
+      updateColorSchema,
+      await request.json(),
+    );
 
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-
-    const hexacode =
-      typeof body?.hexacode === "string" ? body.hexacode.trim() : "";
-
-    const isActive =
-      typeof body?.isActive === "boolean"
-        ? body.isActive
-        : existingColor.isActive;
-
-    if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Color name is required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!bodyValidation.success) {
+      return bodyValidation.response;
     }
 
-    if (hexacode && !/^#[0-9A-Fa-f]{6}$/.test(hexacode)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Enter a valid hex color.",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
+    const { name, hexacode } = bodyValidation.data;
+    const isActive = bodyValidation.data.isActive ?? existingColor.isActive;
 
     const duplicate = await prisma.color.findFirst({
       where: {
@@ -154,7 +141,13 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       );
     }
 
-    const { id } = await params;
+    const validation = validateRequest(adminIdParamsSchema, await params);
+
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    const { id } = validation.data;
 
     const color = await prisma.color.findUnique({
       where: {

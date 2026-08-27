@@ -1,48 +1,25 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
-import {
-  getPublicProducts,
-  type ProductSort,
-} from "@/lib/services/product.service";
+import { getPublicProducts } from "@/lib/services/product.service";
+import { validateRequest } from "@/lib/validate-request";
+import { publicProductQuerySchema } from "@/lib/validations/product";
 
 export async function GET(request: Request) {
   try {
     const session = await auth();
     const { searchParams } = new URL(request.url);
 
-    // FILTERS
+    const validation = validateRequest(
+      publicProductQuerySchema,
+      Object.fromEntries(searchParams),
+    );
 
-    const category = searchParams.get("category")?.trim() || undefined;
+    if (!validation.success) {
+      return validation.response;
+    }
 
-    const search = searchParams.get("search")?.trim() || undefined;
-
-    //  SORT
-
-    const rawSort = searchParams.get("sort");
-
-    const sort: ProductSort =
-      rawSort === "oldest" ||
-      rawSort === "price-low" ||
-      rawSort === "price-high"
-        ? rawSort
-        : "newest";
-
-    // PAGE
-
-    const parsedPage = Number(searchParams.get("page"));
-
-    const page =
-      Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-
-    //  PAGE SIZE
-
-    const parsedPageSize = Number(searchParams.get("pageSize"));
-
-    const pageSize =
-      Number.isInteger(parsedPageSize) && parsedPageSize > 0
-        ? Math.min(parsedPageSize, 24)
-        : 12;
+    const { category, search, sort, page, pageSize } = validation.data;
 
     // GET PRODUCTS
 

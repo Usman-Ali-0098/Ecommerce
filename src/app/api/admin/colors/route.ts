@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
+import { validateRequest } from "@/lib/validate-request";
+import { createColorSchema } from "@/lib/validations/admin";
 
 export async function GET() {
   try {
@@ -65,36 +67,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const validation = validateRequest(createColorSchema, await request.json());
 
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-
-    const hexacode =
-      typeof body?.hexacode === "string" ? body.hexacode.trim() : "";
-
-    if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Color name is required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!validation.success) {
+      return validation.response;
     }
 
-    if (hexacode && !/^#[0-9A-Fa-f]{6}$/.test(hexacode)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Enter a valid hex color, for example #000000.",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
+    const { name, hexacode } = validation.data;
 
     const existingColor = await prisma.color.findFirst({
       where: {

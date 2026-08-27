@@ -3,40 +3,15 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { cloudinary } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { validateRequest } from "@/lib/validate-request";
+import { adminIdParamsSchema } from "@/lib/validations/admin";
+import { updateAdminProductSchema } from "@/lib/validations/admin-product";
 
 type RouteContext = {
   params: Promise<{
     id: string;
   }>;
 };
-
-type VariantInput = {
-  id?: string;
-  sku: string;
-  price: number;
-  stock: number;
-  colorId: string | null;
-  sizeId: string | null;
-  imageUrl: string | null;
-  imagePublicId: string | null;
-};
-
-type ImageInput =
-  | {
-      source: "existing";
-      id: string;
-      colorId: string | null;
-      position: number;
-      isPrimary: boolean;
-    }
-  | {
-      source: "new";
-      url: string;
-      publicId: string;
-      colorId: string | null;
-      position: number;
-      isPrimary: boolean;
-    };
 
 class RouteError extends Error {
   status: number;
@@ -104,136 +79,6 @@ async function cleanupCloudinaryImages(publicIds: string[]) {
   );
 }
 
-function normalizeImages(value: unknown): ImageInput[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((rawImage, index) => {
-    const source = rawImage?.source;
-
-    const positionValue = Number(rawImage?.position);
-
-    const position =
-      Number.isInteger(positionValue) && positionValue >= 0
-        ? positionValue
-        : index;
-
-    const isPrimary = rawImage?.isPrimary === true;
-    const colorId =
-      typeof rawImage?.colorId === "string" && rawImage.colorId.trim()
-        ? rawImage.colorId.trim()
-        : null;
-
-    if (source === "existing") {
-      const id = typeof rawImage?.id === "string" ? rawImage.id.trim() : "";
-
-      if (!id) {
-        throw new RouteError("Invalid existing product image.");
-      }
-
-      return {
-        source: "existing",
-        id,
-        colorId,
-        position,
-        isPrimary,
-      };
-    }
-
-    if (source === "new") {
-      const url = typeof rawImage?.url === "string" ? rawImage.url.trim() : "";
-
-      const publicId =
-        typeof rawImage?.publicId === "string" ? rawImage.publicId.trim() : "";
-
-      if (!url || !publicId) {
-        throw new RouteError("Invalid new product image.");
-      }
-
-      return {
-        source: "new",
-        url,
-        publicId,
-        colorId,
-        position,
-        isPrimary,
-      };
-    }
-
-    throw new RouteError("Invalid product image information.");
-  });
-}
-
-function normalizeVariants(value: unknown): VariantInput[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new RouteError("At least one variant is required.");
-  }
-
-  return value.map((rawVariant) => {
-    const id =
-      typeof rawVariant?.id === "string" && rawVariant.id.trim()
-        ? rawVariant.id.trim()
-        : undefined;
-
-    const sku =
-      typeof rawVariant?.sku === "string"
-        ? rawVariant.sku.trim().toUpperCase()
-        : "";
-
-    const price = Number(rawVariant?.price);
-    const stock = Number(rawVariant?.stock);
-
-    const colorId =
-      typeof rawVariant?.colorId === "string" && rawVariant.colorId.trim()
-        ? rawVariant.colorId.trim()
-        : null;
-
-    const sizeId =
-      typeof rawVariant?.sizeId === "string" && rawVariant.sizeId.trim()
-        ? rawVariant.sizeId.trim()
-        : null;
-
-    const imageUrl =
-      typeof rawVariant?.imageUrl === "string" && rawVariant.imageUrl.trim()
-        ? rawVariant.imageUrl.trim()
-        : null;
-
-    const imagePublicId =
-      typeof rawVariant?.imagePublicId === "string" &&
-      rawVariant.imagePublicId.trim()
-        ? rawVariant.imagePublicId.trim()
-        : null;
-
-    if (!sku) {
-      throw new RouteError("Every variant requires an SKU.");
-    }
-
-    if (!Number.isInteger(price) || price <= 0) {
-      throw new RouteError(`Price for ${sku} must be a whole rupee amount.`);
-    }
-
-    if (!Number.isInteger(stock) || stock < 0) {
-      throw new RouteError(`Invalid stock for ${sku}.`);
-    }
-
-    if (Boolean(imageUrl) !== Boolean(imagePublicId)) {
-      throw new RouteError(`Invalid variant image for ${sku}.`);
-    }
-
-    return {
-      id,
-      sku,
-      price,
-      stock,
-      colorId,
-      sizeId,
-      imageUrl,
-      imagePublicId,
-    };
-  });
-}
-
 export async function PUT(request: Request, { params }: RouteContext) {
   let newlyUploadedPublicIds: string[] = [];
 
@@ -244,11 +89,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
       throw new RouteError("Admin authentication required.", 401);
     }
 
-    const { id } = await params;
+    const paramsValidation = validateRequest(adminIdParamsSchema, await params);
 
-    if (!id?.trim()) {
-      throw new RouteError("Product ID is required.");
+    if (!paramsValidation.success) {
+      return paramsValidation.response;
     }
+
+    const { id } = paramsValidation.data;
 
     const existingProduct = await prisma.product.findUnique({
       where: { id },
@@ -271,28 +118,17 @@ export async function PUT(request: Request, { params }: RouteContext) {
       throw new RouteError("Product not found.", 404);
     }
 
-    const body = await request.json();
+    const bodyValidation = validateRequest(
+      updateAdminProductSchema,
+      await request.json(),
+    );
 
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-
-    const description =
-      typeof body?.description === "string" ? body.description.trim() : "";
-
-    const categoryId =
-      typeof body?.categoryId === "string" ? body.categoryId.trim() : "";
-
-    const isActive = body?.isActive !== false;
-
-    if (!name) {
-      throw new RouteError("Product name is required.");
+    if (!bodyValidation.success) {
+      return bodyValidation.response;
     }
 
-    if (!categoryId) {
-      throw new RouteError("Category is required.");
-    }
-
-    const images = normalizeImages(body?.images);
-    const variants = normalizeVariants(body?.variants);
+    const { name, description, categoryId, isActive, images, variants } =
+      bodyValidation.data;
 
     const variantColorIds = new Set(
       variants
@@ -314,10 +150,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
      * Newly-uploaded base product images.
      */
     newlyUploadedPublicIds = images
-      .filter(
-        (image): image is Extract<ImageInput, { source: "new" }> =>
-          image.source === "new",
-      )
+      .filter((image) => image.source === "new")
       .map((image) => image.publicId);
 
     const primaryCount = images.filter((image) => image.isPrimary).length;
@@ -451,10 +284,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
     );
 
     const submittedExistingImageIds = images
-      .filter(
-        (image): image is Extract<ImageInput, { source: "existing" }> =>
-          image.source === "existing",
-      )
+      .filter((image) => image.source === "existing")
       .map((image) => image.id);
 
     for (const imageId of submittedExistingImageIds) {
@@ -469,11 +299,8 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
     const submittedExistingVariantIds = variants
       .filter(
-        (
-          variant,
-        ): variant is VariantInput & {
-          id: string;
-        } => Boolean(variant.id),
+        (variant): variant is typeof variant & { id: string } =>
+          Boolean(variant.id),
       )
       .map((variant) => variant.id);
 
@@ -690,19 +517,13 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       );
     }
 
-    const { id } = await params;
+    const validation = validateRequest(adminIdParamsSchema, await params);
 
-    if (!id?.trim()) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Product ID is required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!validation.success) {
+      return validation.response;
     }
+
+    const { id } = validation.data;
 
     /*
      * Load both:

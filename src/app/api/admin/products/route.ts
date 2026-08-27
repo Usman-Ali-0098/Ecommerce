@@ -3,25 +3,8 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { cloudinary } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
-
-type VariantInput = {
-  sku: string;
-  price: number;
-  stock: number;
-  colorId: string | null;
-  sizeId: string | null;
-  imageUrl: string | null;
-  imagePublicId: string | null;
-};
-
-type ImageInput = {
-  source: "new";
-  url: string;
-  publicId: string;
-  colorId: string | null;
-  position: number;
-  isPrimary: boolean;
-};
+import { validateRequest } from "@/lib/validate-request";
+import { createAdminProductSchema } from "@/lib/validations/admin-product";
 
 class RouteError extends Error {
   status: number;
@@ -83,106 +66,6 @@ async function cleanupCloudinaryImages(publicIds: string[]) {
   );
 }
 
-function normalizeImages(value: unknown): ImageInput[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((rawImage, index) => {
-    const source = rawImage?.source;
-    const url = typeof rawImage?.url === "string" ? rawImage.url.trim() : "";
-    const publicId =
-      typeof rawImage?.publicId === "string" ? rawImage.publicId.trim() : "";
-    const colorId =
-      typeof rawImage?.colorId === "string" && rawImage.colorId.trim()
-        ? rawImage.colorId.trim()
-        : null;
-    const position = Number(rawImage?.position);
-    const isPrimary = rawImage?.isPrimary === true;
-
-    if (source !== "new" || !url || !publicId) {
-      throw new RouteError("Invalid product image information.");
-    }
-
-    return {
-      source: "new",
-      url,
-      publicId,
-      colorId,
-      position: Number.isInteger(position) && position >= 0 ? position : index,
-      isPrimary,
-    };
-  });
-}
-
-function normalizeVariants(value: unknown): VariantInput[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new RouteError("At least one product variant is required.");
-  }
-
-  return value.map((rawVariant) => {
-    const sku =
-      typeof rawVariant?.sku === "string"
-        ? rawVariant.sku.trim().toUpperCase()
-        : "";
-
-    const price = Number(rawVariant?.price);
-    const stock = Number(rawVariant?.stock);
-
-    const colorId =
-      typeof rawVariant?.colorId === "string" && rawVariant.colorId.trim()
-        ? rawVariant.colorId.trim()
-        : null;
-
-    const sizeId =
-      typeof rawVariant?.sizeId === "string" && rawVariant.sizeId.trim()
-        ? rawVariant.sizeId.trim()
-        : null;
-
-    const imageUrl =
-      typeof rawVariant?.imageUrl === "string" && rawVariant.imageUrl.trim()
-        ? rawVariant.imageUrl.trim()
-        : null;
-
-    const imagePublicId =
-      typeof rawVariant?.imagePublicId === "string" &&
-      rawVariant.imagePublicId.trim()
-        ? rawVariant.imagePublicId.trim()
-        : null;
-
-    if (!sku) {
-      throw new RouteError("Every variant requires an SKU.");
-    }
-
-    if (!Number.isInteger(price) || price <= 0) {
-      throw new RouteError(`Price for ${sku} must be a whole rupee amount.`);
-    }
-
-    if (!Number.isInteger(stock) || stock < 0) {
-      throw new RouteError(`Invalid stock for ${sku}.`);
-    }
-
-    /*
-     * Variant image is optional,
-     * but URL and Cloudinary public ID
-     * must either both exist or both be null.
-     */
-    if (Boolean(imageUrl) !== Boolean(imagePublicId)) {
-      throw new RouteError(`Invalid variant image for ${sku}.`);
-    }
-
-    return {
-      sku,
-      price,
-      stock,
-      colorId,
-      sizeId,
-      imageUrl,
-      imagePublicId,
-    };
-  });
-}
-
 export async function POST(request: Request) {
   let uploadedPublicIds: string[] = [];
 
@@ -193,28 +76,17 @@ export async function POST(request: Request) {
       throw new RouteError("Admin authentication required.", 401);
     }
 
-    const body = await request.json();
+    const validation = validateRequest(
+      createAdminProductSchema,
+      await request.json(),
+    );
 
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-
-    const description =
-      typeof body?.description === "string" ? body.description.trim() : "";
-
-    const categoryId =
-      typeof body?.categoryId === "string" ? body.categoryId.trim() : "";
-
-    const isActive = body?.isActive !== false;
-
-    if (!name) {
-      throw new RouteError("Product name is required.");
+    if (!validation.success) {
+      return validation.response;
     }
 
-    if (!categoryId) {
-      throw new RouteError("Valid category is required.");
-    }
-
-    const images = normalizeImages(body?.images);
-    const variants = normalizeVariants(body?.variants);
+    const { name, description, categoryId, isActive, images, variants } =
+      validation.data;
 
     const variantColorIds = new Set(
       variants

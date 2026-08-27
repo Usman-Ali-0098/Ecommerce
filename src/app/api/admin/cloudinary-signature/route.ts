@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
 import { cloudinary } from "@/lib/cloudinary";
+import { validateRequest } from "@/lib/validate-request";
+import { cloudinaryCleanupSchema } from "@/lib/validations/admin";
 
 const PRODUCT_IMAGE_FOLDER = "ecommerce/products";
 
@@ -106,14 +108,16 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const validation = validateRequest(
+      cloudinaryCleanupSchema,
+      await request.json(),
+    );
 
-    const publicIds = Array.isArray(body?.publicIds)
-      ? body.publicIds.filter(
-          (value: unknown): value is string =>
-            typeof value === "string" && value.trim().length > 0,
-        )
-      : [];
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    const { publicIds } = validation.data;
 
     if (publicIds.length === 0) {
       return NextResponse.json({

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
+import { validateRequest } from "@/lib/validate-request";
+import { createSizeSchema } from "@/lib/validations/admin";
 
 export async function GET() {
   try {
@@ -71,35 +73,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const validation = validateRequest(createSizeSchema, await request.json());
 
-    const name = typeof body?.name === "string" ? body.name.trim() : "";
-
-    const sortOrder = Number(body?.sortOrder);
-
-    if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Size name is required.",
-        },
-        {
-          status: 400,
-        },
-      );
+    if (!validation.success) {
+      return validation.response;
     }
 
-    if (!Number.isInteger(sortOrder) || sortOrder < 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Sort order must be a whole number of 0 or greater.",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
+    const { name, sortOrder } = validation.data;
 
     const existingSize = await prisma.size.findFirst({
       where: {

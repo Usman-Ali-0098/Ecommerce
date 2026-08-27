@@ -1,8 +1,3 @@
-// // This is your Prisma schema file,
-// // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// // Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -13,50 +8,37 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  fullName  String
-  email     String   @unique
-  mobile    String?
-  password  String?
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  accounts Account[]
-
+  id                  Int                  @id @default(autoincrement())
+  fullName            String
+  email               String               @unique
+  mobile              String?
+  password            String?
+  role                Role                 @default(USER)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  accounts            Account[]
+  cart                Cart?
+  notifications       Notification[]
+  orders              Order[]
   passwordResetTokens PasswordResetToken[]
-
-  cart          Cart?
-  orders        Order[]
-  notifications Notification[]
-}
-
-enum Role {
-  USER
-  ADMIN
 }
 
 model Account {
-  id     String @id @default(cuid())
-  userId Int
-
+  id                String   @id @default(cuid())
+  userId            Int
   type              String
   provider          String
   providerAccountId String
-
-  refreshToken String? @db.Text
-  accessToken  String? @db.Text
-  idToken      String? @db.Text
-
-  expiresAt    Int?
-  tokenType    String?
-  scope        String?
-  sessionState String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken      String?
+  accessToken       String?
+  idToken           String?
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  sessionState      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -68,30 +50,25 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Indexes speed up database search queries. When you ask the database "find all reset tokens for User #42", the database uses this index to find them instantly without scanning the whole table.
   @@index([userId])
   @@index([expiresAt])
 }
 
 model Product {
-  // @default(cuid()): This tells the system to automatically generate a value if you do not provide one. It calls the cuid() function.
-  id          String   @id @default(cuid())
-  categoryId  String
+  id          String           @id @default(cuid())
   name        String
-  slug        String   @unique
+  slug        String           @unique
   description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  category Category @relation(fields: [categoryId], references: [id])
-
-  images   ProductImage[]
-  variants ProductVariant[]
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  categoryId  String
+  category    Category         @relation(fields: [categoryId], references: [id])
+  images      ProductImage[]
+  variants    ProductVariant[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -99,14 +76,13 @@ model Product {
 }
 
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  products Product[]
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
 
   @@index([isActive])
 }
@@ -114,21 +90,14 @@ model Category {
 model ProductImage {
   id        String  @id @default(cuid())
   productId String
-  colorId   String?
   url       String
-  // Stores Cloudinary’s internal resource identifier.
-  publicId  String?
-
-  altText String?
-
-  // Why it's used: Sorting and gallery order. Products usually have multiple images (thumbnails, side views, angles). The position field lets you control the exact order in which images appear on the frontend (e.g., 0, 1, 2, 3) so admins can reorder images via drag-and-drop without renaming files or altering database IDs.
-  position Int @default(0)
-
-  // Why it's used: Main thumbnail/cover image flag. E-commerce stores need one main thumbnail to display on product grid pages, search results, shopping carts, and checkout screens. Instead of fetching all images and guessing which one to show, isPrimary: true allows you to query the main image directly:
+  altText   String?
+  position  Int     @default(0)
   isPrimary Boolean @default(false)
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  color   Color?  @relation(fields: [colorId], references: [id], onDelete: SetNull)
+  publicId  String?
+  colorId   String?
+  color     Color?  @relation(fields: [colorId], references: [id])
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([colorId])
@@ -136,52 +105,45 @@ model ProductImage {
 }
 
 model Color {
-  id       String  @id @default(cuid())
-  name     String  @unique
+  id       String           @id @default(cuid())
+  name     String           @unique
   hexacode String?
-  isActive Boolean @default(true)
-
-  variants ProductVariant[]
+  isActive Boolean          @default(true)
   images   ProductImage[]
+  variants ProductVariant[]
 
   @@index([isActive])
 }
 
 model Size {
-  id        String  @id @default(cuid())
-  name      String  @unique
-  sortOrder Int     @default(0)
-  isActive  Boolean @default(true)
-
-  variants ProductVariant[]
+  id        String           @id @default(cuid())
+  name      String           @unique
+  sortOrder Int              @default(0)
+  isActive  Boolean          @default(true)
+  variants  ProductVariant[]
 
   @@index([isActive])
   @@index([sortOrder])
 }
 
 model ProductVariant {
-  id            String  @id @default(cuid())
+  id            String      @id @default(cuid())
   productId     String
   colorId       String?
   sizeId        String?
-  sku           String  @unique
-  price         Decimal @db.Decimal(10, 2)
-  stock         Int     @default(0)
-  isActive      Boolean @default(true)
-  imageUrl      String?
+  sku           String      @unique
+  price         Decimal     @db.Decimal(10, 2)
+  stock         Int         @default(0)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   imagePublicId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  color Color? @relation(fields: [colorId], references: [id], onDelete: SetNull)
-
-  size Size? @relation(fields: [sizeId], references: [id], onDelete: SetNull)
-
-  cartItems  CartItem[]
-  orderItems OrderItem[]
+  imageUrl      String?
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  color         Color?      @relation(fields: [colorId], references: [id])
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size          Size?       @relation(fields: [sizeId], references: [id])
 
   @@index([productId])
   @@index([colorId])
@@ -190,26 +152,23 @@ model ProductVariant {
 }
 
 model Cart {
-  id        String   @id @default(cuid())
-  userId    Int      @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items CartItem[]
+  id        String     @id @default(cuid())
+  userId    Int        @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
 }
 
 model CartItem {
-  id        String   @id @default(cuid())
+  id        String         @id @default(cuid())
   cartId    String
   variantId String
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
-
-  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int            @default(1)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([cartId, variantId])
   @@index([cartId])
@@ -217,22 +176,19 @@ model CartItem {
 }
 
 model Order {
-  id          String      @id @default(cuid())
-  orderNumber String      @unique
-  userId      Int
-  status      OrderStatus @default(PENDING)
-
-  subtotal Decimal @db.Decimal(12, 2)
-  tax      Decimal @db.Decimal(12, 2)
-  total    Decimal @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  items              OrderItem[]
-  notifications      Notification[]
+  id                 String              @id @default(cuid())
+  orderNumber        String              @unique
+  userId             Int
+  status             OrderStatus         @default(PENDING)
+  subtotal           Decimal             @db.Decimal(12, 2)
+  tax                Decimal             @db.Decimal(12, 2)
+  total              Decimal             @db.Decimal(12, 2)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   adminNotifications AdminNotification[]
+  notifications      Notification[]
+  user               User                @relation(fields: [userId], references: [id])
+  items              OrderItem[]
 
   @@index([userId])
   @@index([status])
@@ -240,28 +196,62 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
-  orderId   String
-  variantId String?
-
+  id           String          @id @default(cuid())
+  orderId      String
+  variantId    String?
   productName  String
   sku          String
   colorName    String?
   sizeName     String?
+  unitPrice    Decimal         @db.Decimal(12, 2)
+  quantity     Int
+  lineTotal    Decimal         @db.Decimal(12, 2)
+  createdAt    DateTime        @default(now())
   imageUrl     String?
   imageAltText String?
-
-  unitPrice Decimal @db.Decimal(12, 2)
-  quantity  Int
-  lineTotal Decimal @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
-
-  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([orderId])
   @@index([variantId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    Int
+  orderId   String?
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  order     Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@index([orderId])
+}
+
+model AdminNotification {
+  id        String                @id @default(cuid())
+  orderId   String?
+  type      AdminNotificationType
+  title     String
+  message   String
+  isRead    Boolean               @default(false)
+  createdAt DateTime              @default(now())
+  order     Order?                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([orderId])
+}
+
+enum Role {
+  USER
+  ADMIN
 }
 
 enum OrderStatus {
@@ -280,42 +270,7 @@ enum NotificationType {
   ORDER_CANCELLED
 }
 
-model Notification {
-  id        String           @id @default(cuid())
-  userId    Int
-  orderId   String?
-  type      NotificationType
-  title     String
-  message   String
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([userId, isRead])
-  @@index([createdAt])
-  @@index([orderId])
-}
-
 enum AdminNotificationType {
   NEW_ORDER
   ORDER_CANCELLED
-}
-
-model AdminNotification {
-  id        String                @id @default(cuid())
-  orderId   String?
-  type      AdminNotificationType
-  title     String
-  message   String
-  isRead    Boolean               @default(false)
-  createdAt DateTime              @default(now())
-
-  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([isRead])
-  @@index([createdAt])
-  @@index([orderId])
 }

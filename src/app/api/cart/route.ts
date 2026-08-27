@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/user-auth";
+import { validateRequest } from "@/lib/validate-request";
+import { addCartItemSchema } from "@/lib/validations/cart";
 
 export async function POST(request: Request) {
   try {
@@ -44,40 +46,13 @@ export async function POST(request: Request) {
     const userId = user.id;
 
     const body = await request.json();
+    const validation = validateRequest(addCartItemSchema, body);
 
-    const variantId =
-      typeof body.variantId === "string"
-        ? body.variantId.trim()
-        : "";
-
-    const quantity = Number(body.quantity);
-
-    if (!variantId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Variant is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+    if (!validation.success) {
+      return validation.response;
     }
 
-    if (
-      !Number.isInteger(quantity) ||
-      quantity < 1
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Quantity must be at least 1.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
+    const { variantId, quantity } = validation.data;
 
     const variant =
       await prisma.productVariant.findFirst({

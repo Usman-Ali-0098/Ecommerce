@@ -9,6 +9,11 @@ import {
 import {
   prisma,
 } from "@/lib/prisma";
+import { validateRequest } from "@/lib/validate-request";
+import {
+  adminIdParamsSchema,
+  adminOrderStatusSchema,
+} from "@/lib/validations/admin";
 
 type RouteContext = {
   params: Promise<{
@@ -46,21 +51,6 @@ const allowedTransitions:
 };
 
 class ConcurrentOrderUpdateError extends Error {}
-
-function isOrderStatus(
-  value: unknown
-): value is OrderStatus {
-  return (
-    typeof value ===
-      "string" &&
-    [
-      "PENDING",
-      "PROCESSING",
-      "SHIPPED",
-      "DELIVERED",
-    ].includes(value)
-  );
-}
 
 function getNotificationData(
   orderNumber: string,
@@ -132,44 +122,23 @@ export async function PATCH(
       );
     }
 
-    const { id } =
-      await params;
+    const paramsValidation = validateRequest(adminIdParamsSchema, await params);
 
-    if (!id?.trim()) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Order ID is required.",
-        },
-        {
-          status: 400,
-        }
-      );
+    if (!paramsValidation.success) {
+      return paramsValidation.response;
     }
 
-    const body =
-      await request.json();
+    const bodyValidation = validateRequest(
+      adminOrderStatusSchema,
+      await request.json(),
+    );
 
-    const newStatus =
-      body?.status;
-
-    if (
-      !isOrderStatus(
-        newStatus
-      )
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Invalid order status.",
-        },
-        {
-          status: 400,
-        }
-      );
+    if (!bodyValidation.success) {
+      return bodyValidation.response;
     }
+
+    const { id } = paramsValidation.data;
+    const newStatus = bodyValidation.data.status;
 
     /*
      * Load order.

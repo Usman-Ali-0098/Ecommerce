@@ -9,8 +9,11 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "@/lib/services/notification.service";
-
-const DEFAULT_LIMIT = 10;
+import { validateRequest } from "@/lib/validate-request";
+import {
+  notificationActionSchema,
+  notificationListQuerySchema,
+} from "@/lib/validations/notification";
 
 export async function GET(request: Request) {
   try {
@@ -52,15 +55,16 @@ export async function GET(request: Request) {
     const userId = user.id;
 
     const url = new URL(request.url);
+    const validation = validateRequest(
+      notificationListQuerySchema,
+      Object.fromEntries(url.searchParams),
+    );
 
-    const cursor = url.searchParams.get("cursor") ?? undefined;
+    if (!validation.success) {
+      return validation.response;
+    }
 
-    const rawLimit = Number(url.searchParams.get("limit"));
-
-    const limit =
-      Number.isInteger(rawLimit) && rawLimit > 0
-        ? Math.min(rawLimit, 50)
-        : DEFAULT_LIMIT;
+    const { cursor, limit } = validation.data;
 
     /*
      * Run both queries together:
@@ -146,29 +150,19 @@ export async function PATCH(request: Request) {
     const userId = user.id;
 
     const body = await request.json();
+    const validation = validateRequest(notificationActionSchema, body);
 
-    const action = body?.action;
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    const { action } = validation.data;
 
     /*
      * MARK ONE NOTIFICATION READ
      */
     if (action === "markOneRead") {
-      const notificationId = body?.notificationId;
-
-      if (
-        typeof notificationId !== "string" ||
-        notificationId.trim().length === 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Notification ID is required.",
-          },
-          {
-            status: 400,
-          },
-        );
-      }
+      const { notificationId } = validation.data;
 
       const notification = await markNotificationAsRead(userId, notificationId);
 
@@ -223,19 +217,7 @@ export async function PATCH(request: Request) {
       });
     }
 
-    /*
-     * Unsupported action
-     */
-    return NextResponse.json(
-      {
-        success: false,
-
-        message: "Invalid notification action.",
-      },
-      {
-        status: 400,
-      },
-    );
+    throw new Error("Unsupported validated notification action.");
   } catch (error) {
     console.error("Update notification error:", error);
 
