@@ -65,11 +65,17 @@ export default function CartClient({ cart }: CartClientProps) {
     cart.items,
   );
 
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>(() =>
+    cart.items.map((item) => item.id),
+  );
 
   const [updatingItemIds, setUpdatingItemIds] = useState<string[]>([]);
 
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const [itemPendingDelete, setItemPendingDelete] = useState<string | null>(
     null,
@@ -294,6 +300,41 @@ export default function CartClient({ cart }: CartClientProps) {
     }
   }
 
+  async function confirmDeleteAll() {
+    try {
+      setIsDeletingAll(true);
+
+      const response = await fetch("/api/cart", {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        showAlert(result.message ?? "Unable to clear the cart.", {
+          variant: "error",
+        });
+
+        return;
+      }
+
+      setDisplayedItems([]);
+      setSelectedItemIds([]);
+      setIsDeleteAllOpen(false);
+
+      notifyCartUpdated();
+      router.refresh();
+    } catch (error) {
+      console.error("Delete all cart items error:", error);
+
+      showAlert("Something went wrong while clearing the cart.", {
+        variant: "error",
+      });
+    } finally {
+      setIsDeletingAll(false);
+    }
+  }
+
   // / PLACE ORDER
 
   async function placeOrder() {
@@ -388,6 +429,8 @@ export default function CartClient({ cart }: CartClientProps) {
         onToggleAll={toggleAll}
         onUpdateQuantity={updateQuantity}
         onDeleteItem={requestDelete}
+        onDeleteAll={() => setIsDeleteAllOpen(true)}
+        isDeletingAll={isDeletingAll}
       />
 
       <CartSummary
@@ -402,6 +445,18 @@ export default function CartClient({ cart }: CartClientProps) {
         isDeleting={deletingItemId !== null}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
+      />
+
+      <DeleteCartItemModal
+        open={isDeleteAllOpen}
+        isDeleting={isDeletingAll}
+        title="Clear Cart?"
+        description="Are you sure you want to remove all products from your cart?"
+        confirmLabel="Delete All"
+        onCancel={() => {
+          if (!isDeletingAll) setIsDeleteAllOpen(false);
+        }}
+        onConfirm={confirmDeleteAll}
       />
 
       {/* Order Success Modal */}

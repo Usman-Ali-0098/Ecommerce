@@ -67,9 +67,7 @@ export default async function OrderDetailPage({
 
               <OrderMeta label="Order #" value={order.orderNumber} />
 
-              <OrderMeta label="User" value={order.user.fullName} />
-
-              <OrderMeta label="Products" value={String(order.productCount)} />
+              <OrderMeta label="Items" value={String(order.productCount)} />
 
               <OrderMeta label="Subtotal" value={formatMoney(order.subtotal)} />
 

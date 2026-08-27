@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Category = {
   id: string;
@@ -26,6 +26,32 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
   const currentSearch = searchParams.get("search") ?? "";
 
   const [search, setSearch] = useState(currentSearch);
+
+  useEffect(() => {
+    const normalizedSearch = search.trim();
+
+    if (normalizedSearch === currentSearch) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+
+      if (normalizedSearch) {
+        params.set("search", normalizedSearch);
+      } else {
+        params.delete("search");
+      }
+
+      params.delete("page");
+
+      const query = params.toString();
+
+      router.push(query ? `/?${query}` : "/");
+    }, 400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [currentSearch, router, search, searchParams]);
 
   function updateParams(key: string, value?: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -51,10 +77,6 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
 
   function handleSearchChange(value: string) {
     setSearch(value);
-
-    if (!value && currentSearch) {
-      updateParams("search");
-    }
   }
 
   return (

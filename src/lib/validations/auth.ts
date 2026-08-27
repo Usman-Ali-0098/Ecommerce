@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+const passwordRequirements = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Za-z]/, "Password must contain at least one letter")
+  .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character");
+
 export const signupSchema = z
   .object({
     fullName: z
@@ -14,10 +20,10 @@ export const signupSchema = z
       .trim()
       .regex(/^\+[1-9]\d{7,14}$/, "Enter a valid mobile number"),
 
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .max(30, "Password must be at most 30 characters"),
+    password: passwordRequirements.max(
+      30,
+      "Password must be at most 30 characters",
+    ),
 
     confirmPassword: z.string().min(1, "Please confirm your password"),
   })
@@ -40,10 +46,10 @@ export const resetPasswordSchema = z
   .object({
     token: z.string().trim().min(1, "Reset token is required"),
 
-    password: z
-      .string()
-      .min(8, "Password must contain at least 8 characters")
-      .max(72, "Password must not exceed 72 characters"),
+    password: passwordRequirements.max(
+      72,
+      "Password must not exceed 72 characters",
+    ),
 
     confirmPassword: z.string().min(1, "Please confirm your new password"),
   })

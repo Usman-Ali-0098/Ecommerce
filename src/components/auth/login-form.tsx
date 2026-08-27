@@ -246,6 +246,7 @@ export default function LoginForm() {
             type="email"
             autoComplete="email"
             label="Email Address"
+            required
             placeholder="Enter your email"
             value={form.email}
             error={errors.email}
@@ -260,6 +261,7 @@ export default function LoginForm() {
             name="password"
             autoComplete="current-password"
             label="Password"
+            required
             placeholder="Enter your password"
             value={form.password}
             error={errors.password}

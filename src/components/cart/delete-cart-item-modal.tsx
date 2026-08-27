@@ -3,6 +3,9 @@
 type DeleteCartItemModalProps = {
   open: boolean;
   isDeleting?: boolean;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -10,6 +13,9 @@ type DeleteCartItemModalProps = {
 export default function DeleteCartItemModal({
   open,
   isDeleting = false,
+  title = "Remove Product?",
+  description = "Are you sure you want to remove this product from your cart?",
+  confirmLabel = "Remove",
   onCancel,
   onConfirm,
 }: DeleteCartItemModalProps) {
@@ -41,11 +47,11 @@ export default function DeleteCartItemModal({
         {/* Content */}
         <div className="mt-4 text-center">
           <h2 className="text-lg font-semibold text-gray-900">
-            Remove Product?
+            {title}
           </h2>
 
           <p className="mx-auto mt-2 max-w-65 text-sm leading-5 text-gray-500">
-            Are you sure you want to remove this product from your cart?
+            {description}
           </p>
         </div>
 
@@ -66,7 +72,7 @@ export default function DeleteCartItemModal({
             disabled={isDeleting}
             className="h-9 min-w-21 rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isDeleting ? "Removing..." : "Remove"}
+            {isDeleting ? "Removing..." : confirmLabel}
           </button>
         </div>
       </div>

@@ -79,21 +79,10 @@ export async function getPublicProducts({
 
     ...(search
       ? {
-          OR: [
-            {
-              name: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
-
-            {
-              description: {
-                contains: search,
-                mode: "insensitive",
-              },
-            },
-          ],
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
         }
       : {}),
   };

@@ -210,3 +210,58 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE() {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized." },
+        { status: 401 },
+      );
+    }
+
+    if (session.user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Forbidden." },
+        { status: 403 },
+      );
+    }
+
+    const user = await getUserSession();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Invalid user session." },
+        { status: 401 },
+      );
+    }
+
+    const deleted = await prisma.cartItem.deleteMany({
+      where: {
+        cart: {
+          userId: user.id,
+        },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message:
+        deleted.count === 1
+          ? "Product removed from cart."
+          : `${deleted.count} products removed from cart.`,
+      data: {
+        deletedCount: deleted.count,
+      },
+    });
+  } catch (error) {
+    console.error("Delete all cart items error:", error);
+
+    return NextResponse.json(
+      { success: false, message: "Unable to clear the cart." },
+      { status: 500 },
+    );
+  }
+}

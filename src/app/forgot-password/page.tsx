@@ -142,6 +142,7 @@ export default function ForgotPasswordPage() {
             type="email"
             autoComplete="email"
             label="Email Address"
+            required
             placeholder="Enter your email"
             value={form.email}
             error={errors.email}

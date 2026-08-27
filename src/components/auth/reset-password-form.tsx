@@ -187,7 +187,9 @@ export default function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           name="password"
           autoComplete="new-password"
           label="New Password"
+          required
           placeholder="Enter your new password"
+          helperText="Use at least 8 characters, including a letter and a special character."
           value={form.password}
           error={errors.password}
           disabled={isSubmitting}
@@ -199,6 +201,7 @@ export default function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           name="confirmPassword"
           autoComplete="new-password"
           label="Confirm Password"
+          required
           placeholder="Confirm your new password"
           value={form.confirmPassword}
           error={errors.confirmPassword}

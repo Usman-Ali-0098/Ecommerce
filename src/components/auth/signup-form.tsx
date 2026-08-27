@@ -223,6 +223,7 @@ export default function SignupForm() {
             type="text"
             autoComplete="name"
             label="Full Name"
+            required
             placeholder="Enter your full name"
             value={form.fullName}
             error={errors.fullName}
@@ -238,6 +239,7 @@ export default function SignupForm() {
             type="email"
             autoComplete="email"
             label="Email Address"
+            required
             placeholder="Enter your email"
             value={form.email}
             error={errors.email}
@@ -254,6 +256,7 @@ export default function SignupForm() {
             inputMode="tel"
             autoComplete="tel"
             label="Mobile Number"
+            required
             placeholder="Enter your mobile number"
             value={form.mobile}
             error={errors.mobile}
@@ -268,7 +271,9 @@ export default function SignupForm() {
             name="password"
             autoComplete="new-password"
             label="Password"
+            required
             placeholder="Enter your password"
+            helperText="Use at least 8 characters, including a letter and a special character."
             value={form.password}
             error={errors.password}
             disabled={isSubmitting}
@@ -282,6 +287,7 @@ export default function SignupForm() {
             name="confirmPassword"
             autoComplete="new-password"
             label="Confirm Password"
+            required
             placeholder="Confirm your password"
             value={form.confirmPassword}
             error={errors.confirmPassword}

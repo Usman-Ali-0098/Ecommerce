@@ -26,6 +26,7 @@ const PasswordInput = forwardRef<
     helperText,
     className,
     disabled,
+    required,
     ...props
   },
   ref
@@ -47,6 +48,11 @@ const PasswordInput = forwardRef<
           className="mb-1.5 block text-xs font-medium text-gray-700"
         >
           {label}
+          {required ? (
+            <span className="ml-0.5 text-red-500" aria-hidden="true">
+              *
+            </span>
+          ) : null}
         </label>
       ) : null}
 
@@ -60,6 +66,7 @@ const PasswordInput = forwardRef<
               : "password"
           }
           disabled={disabled}
+          required={required}
           aria-invalid={Boolean(error)}
           aria-describedby={describedBy}
           className={cn(
