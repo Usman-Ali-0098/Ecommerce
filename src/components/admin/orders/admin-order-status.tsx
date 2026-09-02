@@ -24,6 +24,10 @@ type Props = {
   orderId: string;
 
   currentStatus: OrderStatus;
+
+  paymentStatus: string;
+
+  paymentMethod?: string;
 };
 
 const allowedNextStatuses: Record<OrderStatus, OrderStatus[]> = {
@@ -42,12 +46,18 @@ function formatStatus(status: string) {
   return status.toLowerCase().replace(/^\w/, (value) => value.toUpperCase());
 }
 
-export default function AdminOrderStatus({ orderId, currentStatus }: Props) {
+export default function AdminOrderStatus({
+  orderId,
+  currentStatus,
+  paymentStatus,
+  paymentMethod = "CARD",
+}: Props) {
   const router = useRouter();
 
   const { alert, showAlert, closeAlert } = useAlert();
 
   const options = allowedNextStatuses[currentStatus];
+  const paymentBlocked = paymentMethod === "CARD" && paymentStatus !== "PAID";
 
   const [status, setStatus] = useState<OrderStatus | "">("");
 
@@ -136,7 +146,13 @@ export default function AdminOrderStatus({ orderId, currentStatus }: Props) {
 
         {/* Change */}
 
-        {options.length > 0 ? (
+        {paymentBlocked ? (
+          <div className="mt-4 border-t border-amber-100 pt-4">
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
+              Fulfillment is locked until the card payment is confirmed.
+            </p>
+          </div>
+        ) : options.length > 0 ? (
           <div className="mt-4 border-t border-gray-100 pt-4">
             <label className="mb-1.5 block text-xs font-medium text-gray-700">
               Change Status

@@ -4,15 +4,13 @@ import { auth } from "@/auth";
 import { getUserSession } from "@/lib/user-auth";
 
 import {
-  createOrder,
   getUserOrders,
   OrderServiceError,
 } from "@/lib/services/order.service";
+import { createStripeCheckout } from "@/lib/services/payment.service";
 import { validateRequest } from "@/lib/validate-request";
-import {
-  createOrderSchema,
-  orderListQuerySchema,
-} from "@/lib/validations/order";
+import { orderListQuerySchema } from "@/lib/validations/order";
+import { createCheckoutSchema } from "@/lib/validations/payment";
 
 export async function GET(request: Request) {
   try {
@@ -131,7 +129,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const validation = validateRequest(createOrderSchema, body);
+    const validation = validateRequest(createCheckoutSchema, body);
 
     if (!validation.success) {
       return validation.response;
@@ -139,16 +137,17 @@ export async function POST(request: Request) {
 
     const { cartItemIds } = validation.data;
 
-    const order = await createOrder({
+    const checkout = await createStripeCheckout({
       userId: user.id,
       cartItemIds,
+      returnUrlBase: new URL(request.url).origin,
     });
 
     return NextResponse.json(
       {
         success: true,
         message: "Order placed successfully.",
-        data: order,
+        data: checkout,
       },
       {
         status: 201,

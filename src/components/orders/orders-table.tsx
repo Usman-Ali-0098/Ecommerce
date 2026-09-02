@@ -22,6 +22,8 @@ export default function OrdersTable({ orders }: OrdersTableProps) {
 
             <th className="px-4 py-2.5">Status</th>
 
+            <th className="px-4 py-2.5">Payment</th>
+
             <th className="px-4 py-2.5 text-right">Action</th>
           </tr>
         </thead>
@@ -53,6 +55,10 @@ export default function OrdersTable({ orders }: OrdersTableProps) {
                 <OrderStatusBadge status={order.status} />
               </td>
 
+              <td className="px-4 py-4">
+                <PaymentStatusBadge status={order.paymentStatus} />
+              </td>
+
               <td className="px-4 py-3 text-right">
                 <Link
                   href={`/orders/${order.id}`}
@@ -67,6 +73,37 @@ export default function OrdersTable({ orders }: OrdersTableProps) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function PaymentStatusBadge({ status }: { status: UserOrder["paymentStatus"] }) {
+  const paid = status === "PAID";
+  const notRequired = status === "NOT_REQUIRED";
+  const processing = status === "PROCESSING" || status === "REQUIRES_ACTION";
+  const label = notRequired
+    ? "Legacy"
+    : paid
+      ? "Paid"
+      : processing
+        ? "Processing"
+        : status === "FAILED" || status === "EXPIRED"
+          ? "Retry required"
+          : status === "CANCELED"
+            ? "Cancelled"
+            : "Unpaid";
+
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+      notRequired
+        ? "bg-gray-100 text-gray-600"
+        : paid
+          ? "bg-green-50 text-green-700"
+        : processing
+          ? "bg-amber-50 text-amber-700"
+          : "bg-red-50 text-red-700"
+    }`}>
+      {label}
+    </span>
   );
 }
 

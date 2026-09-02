@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 
-const CUSTOMER_PAGE_PREFIXES = ["/cart", "/orders"];
+const CUSTOMER_PAGE_PREFIXES = [
+  "/cart",
+  "/orders",
+  "/checkout",
+  "/payment",
+  "/account/payment-methods",
+];
 const CUSTOMER_API_PREFIXES = [
   "/api/cart",
   "/api/orders",
   "/api/notifications",
+  "/api/stripe",
+  "/api/payment-methods",
 ];
 
 function matchesPath(pathname: string, prefixes: string[]) {
@@ -27,6 +35,11 @@ export const proxy = auth((request) => {
   const isCustomerPage = matchesPath(pathname, CUSTOMER_PAGE_PREFIXES);
   const isCustomerApi = matchesPath(pathname, CUSTOMER_API_PREFIXES);
   const isAuthPage = pathname === "/login" || pathname === "/signup";
+
+  // Stripe authenticates webhooks with the Stripe-Signature header.
+  if (pathname === "/api/stripe/webhook") {
+    return NextResponse.next();
+  }
 
   // The public header uses this endpoint to show zero for signed-out visitors.
   if (pathname === "/api/cart/count" && !session?.user?.id) {
@@ -114,9 +127,14 @@ export const config = {
     "/admin/:path*",
     "/cart/:path*",
     "/orders/:path*",
+    "/checkout/:path*",
+    "/payment/:path*",
+    "/account/payment-methods/:path*",
     "/api/admin/:path*",
     "/api/cart/:path*",
     "/api/orders/:path*",
     "/api/notifications/:path*",
+    "/api/stripe/:path*",
+    "/api/payment-methods/:path*",
   ],
 };

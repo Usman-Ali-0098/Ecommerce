@@ -42,6 +42,8 @@ export default function AdminOrdersTable({ orders }: Props) {
 
             <th className="px-4 py-3">Status</th>
 
+            <th className="px-4 py-3">Payment</th>
+
             <th className="px-4 py-3 text-right">Action</th>
           </tr>
         </thead>
@@ -110,6 +112,10 @@ export default function AdminOrdersTable({ orders }: Props) {
                 <OrderStatus status={order.status} />
               </td>
 
+              <td className="px-4 py-3">
+                <PaymentStatus status={order.paymentStatus} />
+              </td>
+
               {/* Action */}
 
               <td className="px-4 py-3">
@@ -129,6 +135,26 @@ export default function AdminOrdersTable({ orders }: Props) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function PaymentStatus({ status }: { status: string }) {
+  const paid = status === "PAID";
+  const notRequired = status === "NOT_REQUIRED";
+  const processing = status === "PROCESSING" || status === "REQUIRES_ACTION";
+
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+      notRequired
+        ? "bg-gray-100 text-gray-600"
+        : paid
+          ? "bg-green-50 text-green-700"
+        : processing
+          ? "bg-amber-50 text-amber-700"
+          : "bg-red-50 text-red-700"
+    }`}>
+      {notRequired ? "Legacy" : paid ? "Paid" : processing ? "Processing" : "Unpaid"}
+    </span>
   );
 }
 

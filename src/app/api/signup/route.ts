@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { signupSchema } from "@/lib/validations/auth";
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
+import { ensureStripeCustomer } from "@/lib/services/stripe-customer.service";
 
 export async function POST(request: Request) {
   try {
@@ -64,6 +65,13 @@ export async function POST(request: Request) {
         role: true,
       },
     });
+
+    try {
+      await ensureStripeCustomer({ userId: user.id });
+    } catch (error) {
+      // Signup remains available if Stripe sandbox is temporarily unavailable.
+      console.error("Deferred Stripe customer creation:", error);
+    }
 
     // 6. Send safe response
     return NextResponse.json(

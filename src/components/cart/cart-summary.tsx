@@ -64,7 +64,7 @@ export default function CartSummary({
             disabled={selectedCount === 0 || isPlacingOrder}
             className="h-10 w-full rounded-md bg-[#087ff5] text-xs font-semibold text-white transition hover:bg-[#066ed6] disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            {isPlacingOrder ? "Placing Order..." : "Place Order"}
+            {isPlacingOrder ? "Placing order..." : "Place order"}
           </button>
         </div>
       </div>

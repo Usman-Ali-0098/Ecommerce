@@ -12,11 +12,7 @@ import CartSummary from "@/components/cart/cart-summary";
 import CartTable from "@/components/cart/cart-table";
 import DeleteCartItemModal from "@/components/cart/delete-cart-item-modal";
 
-import OrderSuccessModal from "@/components/orders/order-success-modal";
-
 import { notifyCartUpdated } from "@/lib/cart-events";
-
-import { notifyNotificationUpdated } from "@/lib/notification-events";
 
 import type { CartData, CartItemData } from "@/types/cart";
 
@@ -30,17 +26,7 @@ type PlaceOrderResponse = {
   message?: string;
 
   data?: {
-    id: string;
-
-    orderNumber: string;
-
-    status: string;
-
-    subtotal: number;
-
-    tax: number;
-
-    total: number;
+    sessionId: string;
   };
 };
 
@@ -82,14 +68,6 @@ export default function CartClient({ cart }: CartClientProps) {
   );
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-
-  //ORDER SUCCESS
-
-  const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
-
-  const [placedOrderNumber, setPlacedOrderNumber] = useState<string | null>(
-    null,
-  );
 
   // SELECTED CART ITEMS
 
@@ -349,7 +327,7 @@ export default function CartClient({ cart }: CartClientProps) {
     try {
       setIsPlacingOrder(true);
 
-      const response = await fetch("/api/orders", {
+      const response = await fetch("/api/stripe/checkout", {
         method: "POST",
 
         headers: {
@@ -374,24 +352,15 @@ export default function CartClient({ cart }: CartClientProps) {
         return;
       }
 
-      //ORDER SUCCESS
-
-      setPlacedOrderId(result.data.id);
-
-      setPlacedOrderNumber(result.data.orderNumber);
-
       setSelectedItemIds([]);
 
       /*
-       * Update header/cart/notification
-       * UI after successful checkout.
+       * The selected cart rows have moved into a reserved unpaid order.
        */
 
       notifyCartUpdated();
 
-      notifyNotificationUpdated();
-
-      router.refresh();
+      router.push(`/checkout/${encodeURIComponent(result.data.sessionId)}`);
     } catch (error) {
       console.error("Place order request error:", error);
 
@@ -401,20 +370,6 @@ export default function CartClient({ cart }: CartClientProps) {
     } finally {
       setIsPlacingOrder(false);
     }
-  }
-
-  //SUCCESS MODAL NAVIGATION
-
-  function viewPlacedOrder() {
-    if (!placedOrderId) {
-      return;
-    }
-
-    router.push(`/orders/${placedOrderId}`);
-  }
-
-  function returnHome() {
-    router.push("/");
   }
 
   return (
@@ -460,13 +415,6 @@ export default function CartClient({ cart }: CartClientProps) {
       />
 
       {/* Order Success Modal */}
-
-      <OrderSuccessModal
-        open={placedOrderId !== null}
-        orderNumber={placedOrderNumber}
-        onViewOrder={viewPlacedOrder}
-        onReturnHome={returnHome}
-      />
 
       {alert ? (
         <Alert

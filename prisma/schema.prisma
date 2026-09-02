@@ -21,6 +21,8 @@ model User {
   notifications       Notification[]
   orders              Order[]
   passwordResetTokens PasswordResetToken[]
+  stripeCustomerId    String?              @unique
+  stripeDefaultPaymentMethodId String?
 }
 
 model Account {
@@ -180,19 +182,62 @@ model Order {
   orderNumber        String              @unique
   userId             Int
   status             OrderStatus         @default(PENDING)
+  paymentMethod      OrderPaymentMethod  @default(CARD)
+  paymentStatus      PaymentStatus       @default(UNPAID)
   subtotal           Decimal             @db.Decimal(12, 2)
   tax                Decimal             @db.Decimal(12, 2)
   total              Decimal             @db.Decimal(12, 2)
+  shippingName       String?
+  shippingEmail      String?
+  shippingPhone      String?
+  shippingAddress    String?
+  shippingCity       String?
+  shippingPostalCode String?
+  shippingCountry    String?
+  paymentRetryExpiresAt DateTime?
+  cancelledAt        DateTime?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   adminNotifications AdminNotification[]
   notifications      Notification[]
   user               User                @relation(fields: [userId], references: [id])
   items              OrderItem[]
+  paymentAttempts    PaymentAttempt[]
 
   @@index([userId])
   @@index([status])
+  @@index([paymentStatus])
+  @@index([paymentRetryExpiresAt])
   @@index([createdAt])
+}
+
+model PaymentAttempt {
+  id                      String          @id @default(cuid())
+  orderId                 String
+  provider                PaymentProvider @default(STRIPE)
+  status                  PaymentStatus   @default(UNPAID)
+  amount                  Decimal         @db.Decimal(12, 2)
+  currency                String          @default("pkr")
+  stripeCheckoutSessionId String?         @unique
+  stripePaymentIntentId   String?         @unique
+  failureCode             String?
+  expiresAt               DateTime?
+  paidAt                  DateTime?
+  stockReleasedAt         DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  order                   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+
+model StripeWebhookEvent {
+  id          String   @id
+  eventType   String
+  processedAt DateTime @default(now())
 }
 
 model OrderItem {
@@ -260,6 +305,28 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
+}
+
+enum OrderPaymentMethod {
+  LEGACY
+  CARD
+  CASH_ON_DELIVERY
+}
+
+enum PaymentProvider {
+  STRIPE
+}
+
+enum PaymentStatus {
+  NOT_REQUIRED
+  UNPAID
+  REQUIRES_ACTION
+  PROCESSING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELED
+  REFUNDED
 }
 
 enum NotificationType {

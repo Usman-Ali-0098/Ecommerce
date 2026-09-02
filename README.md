@@ -38,3 +38,53 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 final ,,,, back lazy loading
 user specific add to cart stock error
 ui card setting still pending ...
+
+## Stripe sandbox setup
+
+This project accepts Stripe sandbox keys only. Add these values to `.env` locally
+and to the Vercel project environment when deploying a sandbox build:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+Apply the payment schema migration and regenerate Prisma Client:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
+For local webhooks, install and authenticate Stripe CLI, then forward only the
+events used by the application:
+
+```bash
+stripe login
+stripe listen \
+  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,payment_intent.processing,payment_intent.payment_failed,payment_intent.canceled \
+  --forward-to localhost:3000/api/stripe/webhook
+```
+
+Copy the `whsec_...` value printed by `stripe listen` into
+`STRIPE_WEBHOOK_SECRET`, then restart the development server. The CLI secret is
+different from the signing secret for a webhook endpoint registered in Stripe.
+
+For Vercel, register this HTTPS endpoint in Stripe sandbox mode:
+
+```text
+https://YOUR_DOMAIN/api/stripe/webhook
+```
+
+Use that endpoint's sandbox signing secret in the Vercel environment. Never
+place `sk_test_...` or `whsec_...` values in browser code or source control.
+
+- Keep carts non-reserving.
+  - Reserve stock atomically when checkout starts.
+  - Hold inventory until the Stripe Checkout Session succeeds or expires.
+  - Release it after a failed/expired payment.
+  - Keep the same unpaid order available for retry.
+  - Re-reserve stock when Retry Payment is clicked.
+  - Create a new PaymentAttempt, never a duplicate order.
+  - Never accept payment unless that retry successfully reserves stock first.

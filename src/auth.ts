@@ -5,6 +5,7 @@ import bcrypt from "bcrypt";
 
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
+import { ensureStripeCustomer } from "@/lib/services/stripe-customer.service";
 
 const ONE_HOUR = 60 * 60;
 
@@ -179,6 +180,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return false;
         }
 
+        try {
+          await ensureStripeCustomer({ userId: existingGoogleAccount.user.id });
+        } catch (error) {
+          console.error("Deferred Stripe customer creation:", error);
+        }
+
         return true;
       }
 
@@ -215,6 +222,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         });
 
+        try {
+          await ensureStripeCustomer({ userId: existingUser.id });
+        } catch (error) {
+          console.error("Deferred Stripe customer creation:", error);
+        }
+
         return true;
       }
 
@@ -231,7 +244,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
        * If Account creation fails,
        * User creation is rolled back.
        */
-      await prisma.$transaction(async (tx) => {
+      const newUserId = await prisma.$transaction(async (tx) => {
         const newUser = await tx.user.create({
           data: {
             fullName,
@@ -257,7 +270,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             providerAccountId: googleAccountId,
           },
         });
+
+        return newUser.id;
       });
+
+      try {
+        await ensureStripeCustomer({ userId: newUserId });
+      } catch (error) {
+        console.error("Deferred Stripe customer creation:", error);
+      }
 
       return true;
     },

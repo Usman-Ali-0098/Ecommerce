@@ -12,7 +12,9 @@ type OrderServiceErrorCode =
   | "PRODUCT_UNAVAILABLE"
   | "INVALID_QUANTITY"
   | "INSUFFICIENT_STOCK"
-  | "CART_CHANGED";
+  | "CART_CHANGED"
+  | "ORDER_NOT_RETRYABLE"
+  | "RETRY_LIMIT_REACHED";
 
 export class OrderServiceError extends Error {
   code: OrderServiceErrorCode;
@@ -35,6 +37,18 @@ type GetUserOrdersParams = {
 type CreateOrderParams = {
   userId: number;
   cartItemIds: string[];
+};
+
+type SaveShippingSnapshotParams = {
+  userId: number;
+  orderId: string;
+  shippingName: string;
+  shippingEmail: string;
+  shippingPhone: string;
+  shippingAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
 };
 
 function roundMoney(value: number) {
@@ -104,6 +118,10 @@ export async function getUserOrders({
 
         status: order.status,
 
+        paymentStatus: order.paymentStatus,
+
+        paymentMethod: order.paymentMethod,
+
         createdAt: order.createdAt,
 
         subtotal: Number(order.subtotal),
@@ -163,6 +181,10 @@ export async function getUserOrderById(userId: number, orderId: string) {
           },
         },
       },
+      paymentAttempts: {
+        orderBy: { createdAt: "desc" },
+        select: { status: true, stockReleasedAt: true, createdAt: true },
+      },
     },
   });
 
@@ -182,6 +204,10 @@ export async function getUserOrderById(userId: number, orderId: string) {
 
     status: order.status,
 
+    paymentStatus: order.paymentStatus,
+
+    paymentMethod: order.paymentMethod,
+
     createdAt: order.createdAt,
 
     user: {
@@ -195,6 +221,27 @@ export async function getUserOrderById(userId: number, orderId: string) {
     total: Number(order.total),
 
     productCount,
+
+    shipping: order.shippingName ? {
+      name: order.shippingName,
+      email: order.shippingEmail,
+      phone: order.shippingPhone,
+      address: order.shippingAddress,
+      city: order.shippingCity,
+      postalCode: order.shippingPostalCode,
+      country: order.shippingCountry,
+    } : null,
+
+    paymentAttemptCount: order.paymentAttempts.length,
+
+    paymentRetryExpiresAt: order.paymentRetryExpiresAt,
+
+    canRetryPayment:
+      order.status === "PENDING" &&
+      ["FAILED", "EXPIRED"].includes(order.paymentStatus) &&
+      order.paymentAttempts.length < 3 &&
+      Boolean(order.paymentRetryExpiresAt && order.paymentRetryExpiresAt > new Date()) &&
+      Boolean(order.paymentAttempts[0]),
 
     items: order.items.map((item) => {
       const currentImage = item.variant
@@ -241,7 +288,10 @@ export async function getUserOrderById(userId: number, orderId: string) {
   };
 }
 
-export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
+export async function createReservedOrder({
+  userId,
+  cartItemIds,
+}: CreateOrderParams) {
   const orderNumber = createOrderNumber();
 
   const order = await prisma.$transaction(
@@ -329,41 +379,6 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
 
     const total = subtotal + tax;
 
-    for (const item of cartItems) {
-      const stockUpdate = await tx.productVariant.updateMany({
-        where: {
-          id: item.variantId,
-
-          isActive: true,
-
-          stock: {
-            gte: item.quantity,
-          },
-
-          product: {
-            isActive: true,
-
-            category: {
-              isActive: true,
-            },
-          },
-        },
-
-        data: {
-          stock: {
-            decrement: item.quantity,
-          },
-        },
-      });
-
-      if (stockUpdate.count !== 1) {
-        throw new OrderServiceError(
-          "INSUFFICIENT_STOCK",
-          `${item.variant.product.name} no longer has enough stock. Please review your cart and try again.`,
-        );
-      }
-    }
-
     const newOrder = await tx.order.create({
       data: {
         orderNumber,
@@ -377,6 +392,8 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
         tax,
 
         total,
+
+        paymentRetryExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       },
     });
 
@@ -420,33 +437,33 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
       }),
     });
 
-    await tx.notification.create({
+    const paymentAttempt = await tx.paymentAttempt.create({
       data: {
-        userId,
-
         orderId: newOrder.id,
-
-        type: "ORDER_PLACED",
-
-        title: "Order Placed Successfully",
-
-        message: `Your order ${newOrder.orderNumber} has been placed successfully.`,
+        amount: total,
+        currency: "pkr",
       },
     });
 
-    await tx.adminNotification.create({
-      data: {
-        orderId: newOrder.id,
+    for (const item of cartItems) {
+      const deducted = await tx.productVariant.updateMany({
+        where: {
+          id: item.variantId,
+          isActive: true,
+          stock: { gte: item.quantity },
+          product: { isActive: true, category: { isActive: true } },
+        },
+        data: { stock: { decrement: item.quantity } },
+      });
 
-        type: "NEW_ORDER",
+      if (deducted.count !== 1) {
+        throw new OrderServiceError(
+          "INSUFFICIENT_STOCK",
+          `${item.variant.product.name} no longer has enough stock. Please review your cart and try again.`,
+        );
+      }
 
-        title: "New Order Placed",
-
-        message: `A customer placed order ${newOrder.orderNumber} for Rs. ${Math.round(
-          Number(newOrder.total),
-        ).toLocaleString("en-PK")}.`,
-      },
-    });
+    }
 
     const deleted = await tx.cartItem.deleteMany({
       where: {
@@ -467,7 +484,15 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
       );
     }
 
-      return newOrder;
+      return {
+        order: newOrder,
+        paymentAttempt,
+        items: cartItems.map((item) => ({
+          productName: item.variant.product.name,
+          unitPrice: Number(item.variant.price),
+          quantity: item.quantity,
+        })),
+      };
     },
     {
       maxWait: 10_000,
@@ -476,16 +501,111 @@ export async function createOrder({ userId, cartItemIds }: CreateOrderParams) {
   );
 
   return {
-    id: order.id,
+    id: order.order.id,
 
-    orderNumber: order.orderNumber,
+    orderNumber: order.order.orderNumber,
 
-    status: order.status,
+    status: order.order.status,
 
-    subtotal: Number(order.subtotal),
+    subtotal: Number(order.order.subtotal),
 
-    tax: Number(order.tax),
+    tax: Number(order.order.tax),
 
-    total: Number(order.total),
+    total: Number(order.order.total),
+
+    paymentAttemptId: order.paymentAttempt.id,
+
+    items: order.items,
   };
+}
+
+export async function saveOrderShippingSnapshot({
+  userId,
+  orderId,
+  ...shipping
+}: SaveShippingSnapshotParams) {
+  const updated = await prisma.order.updateMany({
+    where: {
+      id: orderId,
+      userId,
+      status: "PENDING",
+      paymentStatus: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION"] },
+      paymentAttempts: {
+        some: {
+          stockReleasedAt: null,
+          status: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION"] },
+        },
+      },
+    },
+    data: shipping,
+  });
+
+  if (updated.count !== 1) {
+    throw new OrderServiceError(
+      "ORDER_NOT_RETRYABLE",
+      "Delivery details can no longer be changed for this order.",
+    );
+  }
+}
+
+export async function reserveExistingOrderForRetry(userId: number, orderId: string) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({
+      where: { id: orderId, userId },
+      include: {
+        items: true,
+        paymentAttempts: { select: { id: true } },
+      },
+    });
+
+    if (
+      !order ||
+      order.status !== "PENDING" ||
+      !["FAILED", "EXPIRED"].includes(order.paymentStatus) ||
+      !order.paymentRetryExpiresAt ||
+      order.paymentRetryExpiresAt <= new Date()
+    ) {
+      throw new OrderServiceError(
+        "ORDER_NOT_RETRYABLE",
+        "This order is no longer eligible for payment retry.",
+      );
+    }
+
+    if (order.paymentAttempts.length >= 3) {
+      throw new OrderServiceError(
+        "RETRY_LIMIT_REACHED",
+        "The maximum number of payment attempts has been reached.",
+      );
+    }
+
+    const claimed = await tx.order.updateMany({
+      where: { id: order.id, paymentStatus: { in: ["FAILED", "EXPIRED"] } },
+      data: { paymentStatus: "UNPAID" },
+    });
+
+    if (claimed.count !== 1) {
+      throw new OrderServiceError(
+        "ORDER_NOT_RETRYABLE",
+        "Another payment attempt is already active for this order.",
+      );
+    }
+
+    const attempt = await tx.paymentAttempt.create({
+      data: { orderId: order.id, amount: order.total, currency: "pkr" },
+    });
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      subtotal: Number(order.subtotal),
+      tax: Number(order.tax),
+      total: Number(order.total),
+      paymentAttemptId: attempt.id,
+      items: order.items.map((item) => ({
+        productName: item.productName,
+        unitPrice: Number(item.unitPrice),
+        quantity: item.quantity,
+      })),
+    };
+  }, { maxWait: 10_000, timeout: 30_000 });
 }

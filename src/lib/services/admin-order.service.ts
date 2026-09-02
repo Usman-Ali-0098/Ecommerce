@@ -183,6 +183,12 @@ export async function getAdminOrders({
           status:
             order.status,
 
+          paymentStatus:
+            order.paymentStatus,
+
+          paymentMethod:
+            order.paymentMethod,
+
           createdAt:
             order.createdAt,
         })
@@ -312,6 +318,12 @@ export async function getAdminOrderById(
     status:
       order.status,
 
+    paymentStatus:
+      order.paymentStatus,
+
+    paymentMethod:
+      order.paymentMethod,
+
     subtotal:
       Number(
         order.subtotal
@@ -343,6 +355,16 @@ export async function getAdminOrderById(
       email:
         order.user.email,
     },
+
+    shipping: order.shippingName ? {
+      name: order.shippingName,
+      email: order.shippingEmail,
+      phone: order.shippingPhone,
+      address: order.shippingAddress,
+      city: order.shippingCity,
+      postalCode: order.shippingPostalCode,
+      country: order.shippingCountry,
+    } : null,
 
     items:
       order.items.map(

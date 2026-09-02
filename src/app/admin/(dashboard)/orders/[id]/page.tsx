@@ -64,10 +64,22 @@ export default async function AdminOrderDetailPage({ params }: PageProps) {
 
       {/* Summary */}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <SummaryItem label="Date" value={formatDate(order.createdAt)} />
 
         <SummaryItem label="Order #" value={order.orderNumber} />
+
+        <SummaryItem
+          label="Payment"
+          value={
+            order.paymentStatus === "NOT_REQUIRED"
+              ? "Legacy"
+              : order.paymentStatus === "PAID"
+                ? "Paid"
+                : "Unpaid"
+          }
+          secondary={order.paymentStatus}
+        />
 
         <SummaryItem
           label="Customer"
@@ -234,9 +246,28 @@ export default async function AdminOrderDetailPage({ params }: PageProps) {
         <div className="space-y-4">
           {/* Customer */}
 
+          {order.shipping ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm shadow-gray-100/50">
+              <h2 className="text-sm font-semibold text-gray-900">Delivery snapshot</h2>
+              <p className="mt-2 text-xs font-medium text-gray-800">
+                {order.shipping.name}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">{order.shipping.phone}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{order.shipping.email}</p>
+              <p className="mt-2 text-xs leading-5 text-gray-600">
+                {[order.shipping.address, order.shipping.city, order.shipping.postalCode, order.shipping.country].filter(Boolean).join(", ")}
+              </p>
+            </div>
+          ) : null}
+
           {/* Order Status */}
 
-          <AdminOrderStatus orderId={order.id} currentStatus={order.status} />
+          <AdminOrderStatus
+            orderId={order.id}
+            currentStatus={order.status}
+            paymentStatus={order.paymentStatus}
+            paymentMethod={order.paymentMethod}
+          />
 
           {/* Order Amount */}
 

@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   Package,
+  CreditCard,
   ShoppingBag,
   X,
 } from "lucide-react";
@@ -417,6 +418,15 @@ export default function SiteHeader() {
                     >
                       <Package size={14} />
                       My Orders
+                    </Link>
+
+                    <Link
+                      href="/account/payment-methods"
+                      onClick={() => setAccountOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      <CreditCard size={14} />
+                      Payment Methods
                     </Link>
 
                     {/* Logout */}

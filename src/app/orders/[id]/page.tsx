@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import SiteHeader from "@/components/layout/site-header";
+import RetryPaymentButton from "@/components/payments/retry-payment-button";
 
 import { getUserOrderById } from "@/lib/services/order.service";
 import { getUserSession } from "@/lib/user-auth";
@@ -67,6 +68,23 @@ export default async function OrderDetailPage({
 
               <OrderMeta label="Order #" value={order.orderNumber} />
 
+              <OrderMeta
+                label="Payment"
+                value={
+                  order.paymentStatus === "NOT_REQUIRED"
+                    ? "Legacy order"
+                    : order.paymentStatus === "PAID"
+                      ? "Paid"
+                      : order.paymentStatus === "PROCESSING" || order.paymentStatus === "REQUIRES_ACTION"
+                        ? "Processing"
+                        : order.paymentStatus === "FAILED" || order.paymentStatus === "EXPIRED"
+                          ? "Retry required"
+                          : order.paymentStatus === "CANCELED"
+                            ? "Cancelled"
+                            : "Unpaid"
+                }
+              />
+
               <OrderMeta label="Items" value={String(order.productCount)} />
 
               <OrderMeta label="Subtotal" value={formatMoney(order.subtotal)} />
@@ -80,6 +98,28 @@ export default async function OrderDetailPage({
               />
             </div>
           </section>
+
+          {order.canRetryPayment ? (
+            <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-900">Payment required</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Stock will be checked and reserved again before the new payment attempt.
+              </p>
+              <RetryPaymentButton orderId={order.id} />
+            </section>
+          ) : null}
+
+          {order.shipping ? (
+            <section className="mt-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <h2 className="text-sm font-semibold text-gray-900">Delivery snapshot</h2>
+              <p className="mt-1 text-xs text-gray-600">
+                {order.shipping.name} · {order.shipping.email} · {order.shipping.phone}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {[order.shipping.address, order.shipping.city, order.shipping.postalCode, order.shipping.country].filter(Boolean).join(", ")}
+              </p>
+            </section>
+          ) : null}
 
           {/* Product Information */}
 

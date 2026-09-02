@@ -168,6 +168,16 @@ export async function PATCH(
       order.status as
         OrderStatus;
 
+    if (order.paymentMethod === "CARD" && order.paymentStatus !== "PAID") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Card payment must be confirmed before this order can be processed.",
+        },
+        { status: 409 },
+      );
+    }
+
     if (
       currentStatus ===
       newStatus
@@ -223,6 +233,10 @@ export async function PATCH(
           where: {
             id,
             status: currentStatus,
+            OR: [
+              { paymentMethod: { not: "CARD" } },
+              { paymentStatus: "PAID" },
+            ],
           },
 
           data: {

@@ -1,0 +1,4 @@
+ALTER TYPE "OrderPaymentMethod" ADD VALUE 'CASH_ON_DELIVERY';
+
+ALTER TABLE "Order"
+ADD COLUMN "shippingEmail" TEXT;
