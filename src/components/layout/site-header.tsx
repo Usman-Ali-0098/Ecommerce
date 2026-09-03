@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Image from "next/image";
 
@@ -27,6 +27,7 @@ import NotificationDropdown from "@/components/notifications/notification-dropdo
 import { CART_UPDATED_EVENT } from "@/lib/cart-events";
 
 import { NOTIFICATION_UPDATED_EVENT } from "@/lib/notification-events";
+import { useNotificationUpdates } from "@/hooks/use-notification-updates";
 
 const navigation = [
   {
@@ -93,6 +94,31 @@ export default function SiteHeader() {
   const accountRef = useRef<HTMLDivElement | null>(null);
 
   const notificationRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshNotificationCount = useCallback(async (signal?: AbortSignal) => {
+    if (status !== "authenticated") {
+      return;
+    }
+
+    const response = await fetch("/api/notifications/count", {
+      cache: "no-store",
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Unable to load notification count. Status: ${response.status}`,
+      );
+    }
+
+    const result = await response.json();
+    setUnreadNotificationCount(Number(result.unreadCount) || 0);
+  }, [status]);
+
+  useNotificationUpdates({
+    enabled: status === "authenticated",
+    onUpdate: refreshNotificationCount,
+  });
 
   /*
    * --------------------------------
@@ -167,10 +193,7 @@ export default function SiteHeader() {
         return;
       }
 
-      void fetchNotificationCount()
-        .then((nextNotificationCount) => {
-          setUnreadNotificationCount(nextNotificationCount);
-        })
+      void refreshNotificationCount()
         .catch((error) => {
           console.error("Load notification count error:", error);
         });
@@ -187,7 +210,7 @@ export default function SiteHeader() {
         handleNotificationUpdated,
       );
     };
-  }, [status]);
+  }, [status, refreshNotificationCount]);
 
   /*
    * --------------------------------

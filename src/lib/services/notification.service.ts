@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { publishNotificationUpdate } from "@/lib/notifications/socket-server";
 
 const DEFAULT_LIMIT = 10;
 
@@ -22,7 +23,7 @@ export async function createOrderNotification({
   title,
   message,
 }: CreateOrderNotificationParams) {
-  return prisma.notification.create({
+  const notification = await prisma.notification.create({
     data: {
       userId,
       orderId,
@@ -31,6 +32,10 @@ export async function createOrderNotification({
       message,
     },
   });
+
+  publishNotificationUpdate({ userId });
+
+  return notification;
 }
 
 type GetUserNotificationsParams = {

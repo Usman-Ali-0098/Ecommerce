@@ -7,6 +7,7 @@ import {
 } from "@/lib/services/order.service";
 import { ensureStripeCustomer } from "@/lib/services/stripe-customer.service";
 import { getStripe, getStripePublishableKey } from "@/lib/stripe";
+import { publishNotificationUpdate } from "@/lib/notifications/socket-server";
 
 // Stripe Checkout requires at least 30 minutes. Its expiration webhook releases
 // abandoned reservations without requiring an application-level scheduler.
@@ -198,7 +199,7 @@ export async function placeCashOnDeliveryOrder(userId: number, sessionId: string
   // Make card payment impossible before committing the COD order.
   await stripe.checkout.sessions.expire(sessionId);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const current = await tx.paymentAttempt.findUnique({
       where: { id: attempt.id },
       include: { order: true },
@@ -242,6 +243,10 @@ export async function placeCashOnDeliveryOrder(userId: number, sessionId: string
 
     return { orderId: order.id, orderNumber: order.orderNumber };
   });
+
+  publishNotificationUpdate({ userId, notifyAdmins: true });
+
+  return result;
 }
 
 export async function getCheckoutForDisplay(userId: number, sessionId: string) {
@@ -371,7 +376,7 @@ async function finalizePaidAttempt(
   paymentAttemptId: string,
   paymentIntentId?: string | null,
 ) {
-  await prisma.$transaction(async (tx) => {
+  const notificationTarget = await prisma.$transaction(async (tx) => {
     const attempt = await tx.paymentAttempt.findUnique({
       where: { id: paymentAttemptId },
       include: { order: true },
@@ -429,7 +434,16 @@ async function finalizePaidAttempt(
         ).toLocaleString("en-PK")}.`,
       },
     });
+
+    return { userId: attempt.order.userId };
   });
+
+  if (notificationTarget) {
+    publishNotificationUpdate({
+      userId: notificationTarget.userId,
+      notifyAdmins: true,
+    });
+  }
 }
 
 function paymentIntentIdFromSession(session: Stripe.Checkout.Session) {

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -23,6 +24,7 @@ import {
 } from "next-auth/react";
 
 import Image from "next/image"
+import { useNotificationUpdates } from "@/hooks/use-notification-updates";
 
 type AdminHeaderProps = {
   admin: {
@@ -70,9 +72,6 @@ type AdminNotificationCountResponse = {
   success: boolean;
   unreadCount: number;
 };
-
-const NOTIFICATION_POLL_INTERVAL = 60_000;
-const NOTIFICATION_REQUEST_TIMEOUT = 20_000;
 
 /*
  * --------------------------------
@@ -277,87 +276,15 @@ export default function AdminHeader({
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    let pollTimeout: number | null = null;
-    let controller: AbortController | null = null;
-    let requestSequence = 0;
-
-    function clearTimers() {
-      if (pollTimeout !== null) {
-        window.clearTimeout(pollTimeout);
-        pollTimeout = null;
-      }
-
-    }
-
-    async function pollUnreadCount() {
-      if (cancelled || document.visibilityState !== "visible") {
-        return;
-      }
-
-      const sequence = ++requestSequence;
-      const currentController = new AbortController();
-      controller = currentController;
-      const currentRequestTimeout = window.setTimeout(
-        () => currentController.abort(),
-        NOTIFICATION_REQUEST_TIMEOUT,
-      );
-
-      try {
-        const count = await fetchAdminNotificationCount(
-          currentController.signal,
-        );
-
-        if (!cancelled) {
-          setUnreadCount(count);
-        }
-      } catch (error) {
-        if (
-          !cancelled &&
-          !(error instanceof Error && error.name === "AbortError")
-        ) {
-          console.error("Admin notification polling error:", error);
-        }
-      } finally {
-        window.clearTimeout(currentRequestTimeout);
-
-        if (controller === currentController) {
-          controller = null;
-        }
-
-        if (
-          !cancelled &&
-          sequence === requestSequence &&
-          document.visibilityState === "visible"
-        ) {
-          pollTimeout = window.setTimeout(
-            () => void pollUnreadCount(),
-            NOTIFICATION_POLL_INTERVAL,
-          );
-        }
-      }
-    }
-
-    function handleVisibilityChange() {
-      clearTimers();
-      controller?.abort();
-
-      if (document.visibilityState === "visible") {
-        void pollUnreadCount();
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    void pollUnreadCount();
-
-    return () => {
-      cancelled = true;
-      clearTimers();
-      controller?.abort();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+  const refreshUnreadCount = useCallback(async (signal?: AbortSignal) => {
+    const count = await fetchAdminNotificationCount(signal);
+    setUnreadCount(count);
   }, []);
+
+  useNotificationUpdates({
+    enabled: true,
+    onUpdate: refreshUnreadCount,
+  });
 
   /*
    * --------------------------------

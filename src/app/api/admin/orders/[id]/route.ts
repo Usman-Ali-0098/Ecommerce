@@ -9,6 +9,7 @@ import {
 import {
   prisma,
 } from "@/lib/prisma";
+import { publishNotificationUpdate } from "@/lib/notifications/socket-server";
 import { validateRequest } from "@/lib/validate-request";
 import {
   adminIdParamsSchema,
@@ -280,6 +281,10 @@ export async function PATCH(
         timeout: 30_000,
       },
     );
+
+    if (notification) {
+      publishNotificationUpdate({ userId: order.userId });
+    }
 
     return NextResponse.json({
       success: true,
