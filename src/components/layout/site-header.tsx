@@ -11,16 +11,12 @@ import {
   ChevronDown,
   LogIn,
   LogOut,
-  Menu,
   Package,
   CreditCard,
   ShoppingBag,
-  X,
 } from "lucide-react";
 
 import { signOut, useSession } from "next-auth/react";
-
-import { usePathname } from "next/navigation";
 
 import NotificationDropdown from "@/components/notifications/notification-dropdown";
 
@@ -28,13 +24,6 @@ import { CART_UPDATED_EVENT } from "@/lib/cart-events";
 
 import { NOTIFICATION_UPDATED_EVENT } from "@/lib/notification-events";
 import { useNotificationUpdates } from "@/hooks/use-notification-updates";
-
-const navigation = [
-  {
-    label: "Home",
-    href: "/",
-  },
-];
 
 // FETCH CART COUNT
 
@@ -73,15 +62,11 @@ async function fetchNotificationCount() {
 export default function SiteHeader() {
   const { data: session, status } = useSession();
 
-  const pathname = usePathname();
-
   // DROPDOWN STATE
 
   const [accountOpen, setAccountOpen] = useState(false);
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   // COUNTER STATE
 
@@ -95,25 +80,28 @@ export default function SiteHeader() {
 
   const notificationRef = useRef<HTMLDivElement | null>(null);
 
-  const refreshNotificationCount = useCallback(async (signal?: AbortSignal) => {
-    if (status !== "authenticated") {
-      return;
-    }
+  const refreshNotificationCount = useCallback(
+    async (signal?: AbortSignal) => {
+      if (status !== "authenticated") {
+        return;
+      }
 
-    const response = await fetch("/api/notifications/count", {
-      cache: "no-store",
-      signal,
-    });
+      const response = await fetch("/api/notifications/count", {
+        cache: "no-store",
+        signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(
-        `Unable to load notification count. Status: ${response.status}`,
-      );
-    }
+      if (!response.ok) {
+        throw new Error(
+          `Unable to load notification count. Status: ${response.status}`,
+        );
+      }
 
-    const result = await response.json();
-    setUnreadNotificationCount(Number(result.unreadCount) || 0);
-  }, [status]);
+      const result = await response.json();
+      setUnreadNotificationCount(Number(result.unreadCount) || 0);
+    },
+    [status],
+  );
 
   useNotificationUpdates({
     enabled: status === "authenticated",
@@ -193,10 +181,9 @@ export default function SiteHeader() {
         return;
       }
 
-      void refreshNotificationCount()
-        .catch((error) => {
-          console.error("Load notification count error:", error);
-        });
+      void refreshNotificationCount().catch((error) => {
+        console.error("Load notification count error:", error);
+      });
     }
 
     window.addEventListener(
@@ -469,59 +456,8 @@ export default function SiteHeader() {
           ) : null}
 
           {/* Mobile Menu Trigger */}
-
-          <button
-            type="button"
-            onClick={() => setMobileOpen((current) => !current)}
-            className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50 md:hidden"
-            aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
-            aria-expanded={mobileOpen}
-          >
-            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
         </div>
       </div>
-
-      {/* Mobile Navigation */}
-
-      {mobileOpen ? (
-        <div className="border-t border-gray-100 bg-white px-4 py-3 md:hidden">
-          <nav className="space-y-1">
-            {navigation.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`block rounded-lg px-3 py-2.5 text-xs font-medium transition ${
-                    active
-                      ? "bg-blue-50 text-blue-600"
-                      : "text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-
-            {status === "authenticated" ? (
-              <Link
-                href="/orders"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-              >
-                <Package size={14} />
-                My Orders
-              </Link>
-            ) : null}
-          </nav>
-        </div>
-      ) : null}
     </header>
   );
 }

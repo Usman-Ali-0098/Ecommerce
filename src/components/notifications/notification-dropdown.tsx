@@ -267,7 +267,15 @@ export default function NotificationDropdown({
   }
 
   return (
-    <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-90 max-w-[calc(100vw-20px)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+    <div
+      className="fixed left-3 right-3 top-17 z-50
+    overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg sm:absolute
+    sm:left-auto
+    sm:right-0
+    sm:top-[calc(100%+8px)]
+    sm:w-90
+    sm:max-w-[calc(100vw-20px)]"
+    >
       {/* Header */}
 
       <div className="flex items-center justify-between border-b border-gray-200 px-3.5 py-2.5">
@@ -293,7 +301,7 @@ export default function NotificationDropdown({
 
       {/* Notifications */}
 
-      <div className="max-h-110 overflow-y-auto bg-gray-50/60 p-2">
+      <div className="max-h-[65vh] overflow-y-auto bg-gray-50/60 p-2 sm:max-h-110">
         {isInitialLoading ? (
           <NotificationLoading />
         ) : notifications.length === 0 ? (
