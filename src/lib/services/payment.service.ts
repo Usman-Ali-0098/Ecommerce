@@ -66,6 +66,57 @@ export async function createStripeRetryCheckout({
   });
 }
 
+/** Starts Stripe only after the customer explicitly selects card payment. */
+export async function createStripeCheckoutForOrder({
+  userId,
+  orderId,
+  returnUrlBase,
+}: {
+  userId: number;
+  orderId: string;
+  returnUrlBase: string;
+}) {
+  const reservedOrder = await prisma.paymentAttempt.findFirst({
+    where: {
+      order: {
+        id: orderId,
+        userId,
+        status: "PENDING",
+        paymentMethod: "CARD",
+        paymentStatus: "UNPAID",
+      },
+      status: "UNPAID",
+      stockReleasedAt: null,
+    },
+    include: { order: { include: { items: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!reservedOrder) {
+    throw new PaymentServiceError("This order is not available for card payment.");
+  }
+
+  const customerId = await ensureStripeCustomer({ userId });
+  return createCheckoutSessionForReservedOrder({
+    userId,
+    customerId,
+    reservedOrder: {
+      id: reservedOrder.order.id,
+      orderNumber: reservedOrder.order.orderNumber,
+      subtotal: Number(reservedOrder.order.subtotal),
+      tax: Number(reservedOrder.order.tax),
+      total: Number(reservedOrder.order.total),
+      paymentAttemptId: reservedOrder.id,
+      items: reservedOrder.order.items.map((item) => ({
+        productName: item.productName,
+        unitPrice: Number(item.unitPrice),
+        quantity: item.quantity,
+      })),
+    },
+    returnUrlBase,
+  });
+}
+
 async function createCheckoutSessionForReservedOrder({
   userId,
   customerId,
@@ -179,25 +230,34 @@ async function createCheckoutSessionForReservedOrder({
   }
 }
 
-export async function placeCashOnDeliveryOrder(userId: number, sessionId: string) {
+export async function placeCashOnDeliveryOrder(userId: number, orderId: string) {
   const attempt = await prisma.paymentAttempt.findFirst({
-    where: { stripeCheckoutSessionId: sessionId, order: { userId } },
+    where: {
+      orderId,
+      order: { userId, status: "PENDING", paymentStatus: "UNPAID" },
+      status: "UNPAID",
+      stockReleasedAt: null,
+    },
     include: { order: true },
   });
 
-  if (!attempt || attempt.order.status !== "PENDING" || attempt.order.paymentStatus === "PAID") {
+  if (!attempt) {
     throw new PaymentServiceError("This order is not available for cash on delivery.");
   }
 
-  const stripe = getStripe();
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-  if (session.payment_status === "paid" || session.status !== "open") {
-    throw new PaymentServiceError("This checkout can no longer be changed to cash on delivery.");
+  // A direct COD selection never reaches Stripe. If the customer first opened
+  // card payment and then changed their mind, invalidate that already-created
+  // session so it cannot be paid after the order becomes COD.
+  if (attempt.stripeCheckoutSessionId) {
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.retrieve(attempt.stripeCheckoutSessionId);
+    if (session.status === "open" && session.payment_status !== "paid") {
+      await stripe.checkout.sessions.expire(attempt.stripeCheckoutSessionId);
+    }
+    if (session.payment_status === "paid") {
+      throw new PaymentServiceError("This order has already been paid.");
+    }
   }
-
-  // Make card payment impossible before committing the COD order.
-  await stripe.checkout.sessions.expire(sessionId);
 
   const result = await prisma.$transaction(async (tx) => {
     const current = await tx.paymentAttempt.findUnique({

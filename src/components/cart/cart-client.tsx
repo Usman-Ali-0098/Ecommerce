@@ -26,7 +26,7 @@ type PlaceOrderResponse = {
   message?: string;
 
   data?: {
-    sessionId: string;
+    orderId: string;
   };
 };
 
@@ -127,10 +127,10 @@ export default function CartClient({ cart }: CartClientProps) {
       current.map((item) =>
         item.id === itemId
           ? {
-              ...item,
-              quantity,
-              lineTotal: item.variant.price * quantity,
-            }
+            ...item,
+            quantity,
+            lineTotal: item.variant.price * quantity,
+          }
           : item,
       ),
     );
@@ -157,10 +157,10 @@ export default function CartClient({ cart }: CartClientProps) {
           current.map((item) =>
             item.id === itemId
               ? {
-                  ...item,
-                  quantity: confirmedQuantity,
-                  lineTotal: confirmedLineTotal,
-                }
+                ...item,
+                quantity: confirmedQuantity,
+                lineTotal: confirmedLineTotal,
+              }
               : item,
           ),
         );
@@ -179,15 +179,15 @@ export default function CartClient({ cart }: CartClientProps) {
         current.map((item) =>
           item.id === itemId
             ? {
-                ...item,
-                quantity: result.data!.quantity,
-                lineTotal: result.data!.lineTotal,
-                variant: {
-                  ...item.variant,
-                  price: result.data!.unitPrice,
-                  stock: result.data!.stock,
-                },
-              }
+              ...item,
+              quantity: result.data!.quantity,
+              lineTotal: result.data!.lineTotal,
+              variant: {
+                ...item.variant,
+                price: result.data!.unitPrice,
+                stock: result.data!.stock,
+              },
+            }
             : item,
         ),
       );
@@ -202,10 +202,10 @@ export default function CartClient({ cart }: CartClientProps) {
         current.map((item) =>
           item.id === itemId
             ? {
-                ...item,
-                quantity: confirmedQuantity,
-                lineTotal: confirmedLineTotal,
-              }
+              ...item,
+              quantity: confirmedQuantity,
+              lineTotal: confirmedLineTotal,
+            }
             : item,
         ),
       );
@@ -327,7 +327,7 @@ export default function CartClient({ cart }: CartClientProps) {
     try {
       setIsPlacingOrder(true);
 
-      const response = await fetch("/api/stripe/checkout", {
+      const response = await fetch("/api/orders", {
         method: "POST",
 
         headers: {
@@ -356,11 +356,12 @@ export default function CartClient({ cart }: CartClientProps) {
 
       /*
        * The selected cart rows have moved into a reserved unpaid order.
+       * A Stripe Checkout Session is created later, only if card payment is chosen.
        */
 
       notifyCartUpdated();
 
-      router.push(`/checkout/${encodeURIComponent(result.data.sessionId)}`);
+      router.push(`/checkout/${encodeURIComponent(result.data.orderId)}`);
     } catch (error) {
       console.error("Place order request error:", error);
 

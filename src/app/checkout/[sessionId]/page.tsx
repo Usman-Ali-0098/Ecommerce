@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 
 import SiteHeader from "@/components/layout/site-header";
 import CheckoutForm from "@/components/payments/checkout-form";
-import { getCheckoutForDisplay } from "@/lib/services/payment.service";
+import { getOrderCheckoutForDisplay } from "@/lib/services/order.service";
 import { getUserSession } from "@/lib/user-auth";
 
 type CheckoutPageProps = {
@@ -17,8 +17,8 @@ export default async function CheckoutPage({ params }: CheckoutPageProps) {
     redirect("/login");
   }
 
-  const { sessionId } = await params;
-  const checkout = await getCheckoutForDisplay(user.id, sessionId);
+  const { sessionId: orderId } = await params;
+  const checkout = await getOrderCheckoutForDisplay(user.id, orderId);
 
   if (!checkout) {
     notFound();
@@ -37,11 +37,8 @@ export default async function CheckoutPage({ params }: CheckoutPageProps) {
             </div>
 
             <CheckoutForm
-              clientSecret={checkout.clientSecret}
-              publishableKey={checkout.publishableKey}
               orderId={checkout.orderId}
               orderNumber={checkout.orderNumber}
-              sessionId={checkout.sessionId}
               shipping={checkout.shipping}
             />
           </section>

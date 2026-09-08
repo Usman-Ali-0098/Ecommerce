@@ -29,7 +29,7 @@ export const checkoutSessionParamsSchema = z.object({
 });
 
 export const cashOnDeliverySchema = z.object({
-  sessionId: requiredIdSchema,
+  orderId: requiredIdSchema,
 });
 
 export const paymentMethodActionSchema = z.discriminatedUnion("action", [

@@ -246,17 +246,17 @@ export async function getUserOrderById(userId: number, orderId: string) {
     items: order.items.map((item) => {
       const currentImage = item.variant
         ? resolveProductImage({
-            images: item.variant.product.images,
-            colorId: item.variant.colorId,
-            variantImageUrl: item.variant.imageUrl,
-            fallbackAltText: item.productName,
-          })
+          images: item.variant.product.images,
+          colorId: item.variant.colorId,
+          variantImageUrl: item.variant.imageUrl,
+          fallbackAltText: item.productName,
+        })
         : null;
       const image = item.imageUrl
         ? {
-            url: item.imageUrl,
-            altText: item.imageAltText,
-          }
+          url: item.imageUrl,
+          altText: item.imageAltText,
+        }
         : currentImage;
 
       return {
@@ -278,10 +278,10 @@ export async function getUserOrderById(userId: number, orderId: string) {
 
         image: image
           ? {
-              url: image.url,
+            url: image.url,
 
-              altText: image.altText,
-            }
+            altText: image.altText,
+          }
           : null,
       };
     }),
@@ -297,192 +297,192 @@ export async function createReservedOrder({
   const order = await prisma.$transaction(
     async (tx) => {
       const cartItems = await tx.cartItem.findMany({
-      where: {
-        id: {
-          in: cartItemIds,
+        where: {
+          id: {
+            in: cartItemIds,
+          },
+
+          cart: {
+            userId,
+          },
         },
 
-        cart: {
-          userId,
-        },
-      },
+        include: {
+          variant: {
+            include: {
+              color: true,
+              size: true,
 
-      include: {
-        variant: {
-          include: {
-            color: true,
-            size: true,
-
-            product: {
-              include: {
-                category: true,
-                images: {
-                  orderBy: {
-                    position: "asc",
+              product: {
+                include: {
+                  category: true,
+                  images: {
+                    orderBy: {
+                      position: "asc",
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    if (cartItems.length !== cartItemIds.length) {
-      throw new OrderServiceError(
-        "INVALID_CART_ITEMS",
-        "One or more selected cart items are invalid.",
-      );
-    }
-
-    for (const item of cartItems) {
-      const variant = item.variant;
-
-      const product = variant.product;
-
-      if (
-        !variant.isActive ||
-        !product.isActive ||
-        !product.category.isActive
-      ) {
+      if (cartItems.length !== cartItemIds.length) {
         throw new OrderServiceError(
-          "PRODUCT_UNAVAILABLE",
-          `${product.name} is currently unavailable.`,
+          "INVALID_CART_ITEMS",
+          "One or more selected cart items are invalid.",
         );
       }
 
-      if (item.quantity < 1) {
-        throw new OrderServiceError(
-          "INVALID_QUANTITY",
-          `Invalid quantity for ${product.name}.`,
-        );
-      }
-
-      if (variant.stock < item.quantity) {
-        throw new OrderServiceError(
-          "INSUFFICIENT_STOCK",
-          variant.stock === 0
-            ? `${product.name} is out of stock.`
-            : `Only ${variant.stock} item(s) of ${product.name} are available.`,
-        );
-      }
-    }
-
-    const subtotal = roundMoney(
-      cartItems.reduce(
-        (sum, item) => sum + Number(item.variant.price) * item.quantity,
-        0,
-      ),
-    );
-
-    const tax = roundMoney(subtotal * TAX_RATE);
-
-    const total = subtotal + tax;
-
-    const newOrder = await tx.order.create({
-      data: {
-        orderNumber,
-
-        userId,
-
-        status: "PENDING",
-
-        subtotal,
-
-        tax,
-
-        total,
-
-        paymentRetryExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-      },
-    });
-
-    await tx.orderItem.createMany({
-      data: cartItems.map((item) => {
+      for (const item of cartItems) {
         const variant = item.variant;
 
         const product = variant.product;
 
-        const unitPrice = Number(variant.price);
-        const image = resolveProductImage({
-          images: product.images,
-          colorId: variant.colorId,
-          variantImageUrl: variant.imageUrl,
-          fallbackAltText: product.name,
-        });
+        if (
+          !variant.isActive ||
+          !product.isActive ||
+          !product.category.isActive
+        ) {
+          throw new OrderServiceError(
+            "PRODUCT_UNAVAILABLE",
+            `${product.name} is currently unavailable.`,
+          );
+        }
 
-        return {
-          orderId: newOrder.id,
+        if (item.quantity < 1) {
+          throw new OrderServiceError(
+            "INVALID_QUANTITY",
+            `Invalid quantity for ${product.name}.`,
+          );
+        }
 
-          variantId: variant.id,
-
-          productName: product.name,
-
-          sku: variant.sku,
-
-          colorName: variant.color?.name ?? null,
-
-          sizeName: variant.size?.name ?? null,
-
-          imageUrl: image?.url ?? null,
-
-          imageAltText: image?.altText ?? product.name,
-
-          unitPrice,
-
-          quantity: item.quantity,
-
-          lineTotal: roundMoney(unitPrice * item.quantity),
-        };
-      }),
-    });
-
-    const paymentAttempt = await tx.paymentAttempt.create({
-      data: {
-        orderId: newOrder.id,
-        amount: total,
-        currency: "pkr",
-      },
-    });
-
-    for (const item of cartItems) {
-      const deducted = await tx.productVariant.updateMany({
-        where: {
-          id: item.variantId,
-          isActive: true,
-          stock: { gte: item.quantity },
-          product: { isActive: true, category: { isActive: true } },
-        },
-        data: { stock: { decrement: item.quantity } },
-      });
-
-      if (deducted.count !== 1) {
-        throw new OrderServiceError(
-          "INSUFFICIENT_STOCK",
-          `${item.variant.product.name} no longer has enough stock. Please review your cart and try again.`,
-        );
+        if (variant.stock < item.quantity) {
+          throw new OrderServiceError(
+            "INSUFFICIENT_STOCK",
+            variant.stock === 0
+              ? `${product.name} is out of stock.`
+              : `Only ${variant.stock} item(s) of ${product.name} are available.`,
+          );
+        }
       }
 
-    }
-
-    const deleted = await tx.cartItem.deleteMany({
-      where: {
-        id: {
-          in: cartItemIds,
-        },
-
-        cart: {
-          userId,
-        },
-      },
-    });
-
-    if (deleted.count !== cartItemIds.length) {
-      throw new OrderServiceError(
-        "CART_CHANGED",
-        "Your cart changed while placing the order. Please refresh your cart and try again.",
+      const subtotal = roundMoney(
+        cartItems.reduce(
+          (sum, item) => sum + Number(item.variant.price) * item.quantity,
+          0,
+        ),
       );
-    }
+
+      const tax = roundMoney(subtotal * TAX_RATE);
+
+      const total = subtotal + tax;
+
+      const newOrder = await tx.order.create({
+        data: {
+          orderNumber,
+
+          userId,
+
+          status: "PENDING",
+
+          subtotal,
+
+          tax,
+
+          total,
+
+          paymentRetryExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await tx.orderItem.createMany({
+        data: cartItems.map((item) => {
+          const variant = item.variant;
+
+          const product = variant.product;
+
+          const unitPrice = Number(variant.price);
+          const image = resolveProductImage({
+            images: product.images,
+            colorId: variant.colorId,
+            variantImageUrl: variant.imageUrl,
+            fallbackAltText: product.name,
+          });
+
+          return {
+            orderId: newOrder.id,
+
+            variantId: variant.id,
+
+            productName: product.name,
+
+            sku: variant.sku,
+
+            colorName: variant.color?.name ?? null,
+
+            sizeName: variant.size?.name ?? null,
+
+            imageUrl: image?.url ?? null,
+
+            imageAltText: image?.altText ?? product.name,
+
+            unitPrice,
+
+            quantity: item.quantity,
+
+            lineTotal: roundMoney(unitPrice * item.quantity),
+          };
+        }),
+      });
+
+      const paymentAttempt = await tx.paymentAttempt.create({
+        data: {
+          orderId: newOrder.id,
+          amount: total,
+          currency: "pkr",
+        },
+      });
+
+      for (const item of cartItems) {
+        const deducted = await tx.productVariant.updateMany({
+          where: {
+            id: item.variantId,
+            isActive: true,
+            stock: { gte: item.quantity },
+            product: { isActive: true, category: { isActive: true } },
+          },
+          data: { stock: { decrement: item.quantity } },
+        });
+
+        if (deducted.count !== 1) {
+          throw new OrderServiceError(
+            "INSUFFICIENT_STOCK",
+            `${item.variant.product.name} no longer has enough stock. Please review your cart and try again.`,
+          );
+        }
+
+      }
+
+      const deleted = await tx.cartItem.deleteMany({
+        where: {
+          id: {
+            in: cartItemIds,
+          },
+
+          cart: {
+            userId,
+          },
+        },
+      });
+
+      if (deleted.count !== cartItemIds.length) {
+        throw new OrderServiceError(
+          "CART_CHANGED",
+          "Your cart changed while placing the order. Please refresh your cart and try again.",
+        );
+      }
 
       return {
         order: newOrder,
@@ -516,6 +516,46 @@ export async function createReservedOrder({
     paymentAttemptId: order.paymentAttempt.id,
 
     items: order.items,
+  };
+}
+
+export async function getOrderCheckoutForDisplay(userId: number, orderId: string) {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, userId, status: "PENDING", paymentStatus: "UNPAID" },
+    include: {
+      user: { select: { fullName: true, email: true, mobile: true } },
+      items: { orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  if (!order) return null;
+
+  return {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    subtotal: Number(order.subtotal),
+    tax: Number(order.tax),
+    total: Number(order.total),
+    items: order.items.map((item) => ({
+      id: item.id,
+      productName: item.productName,
+      sku: item.sku,
+      colorName: item.colorName,
+      sizeName: item.sizeName,
+      quantity: item.quantity,
+      lineTotal: Number(item.lineTotal),
+      imageUrl: item.imageUrl,
+      imageAltText: item.imageAltText,
+    })),
+    shipping: {
+      shippingName: order.shippingName ?? order.user.fullName,
+      shippingEmail: order.shippingEmail ?? order.user.email,
+      shippingPhone: order.shippingPhone ?? order.user.mobile ?? "",
+      shippingAddress: order.shippingAddress ?? "",
+      shippingCity: order.shippingCity ?? "",
+      shippingPostalCode: order.shippingPostalCode ?? "",
+      shippingCountry: order.shippingCountry ?? "Pakistan",
+    },
   };
 }
 

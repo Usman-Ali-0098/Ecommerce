@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const validation = validateRequest(cashOnDeliverySchema, await request.json());
     if (!validation.success) return validation.response;
 
-    const order = await placeCashOnDeliveryOrder(user.id, validation.data.sessionId);
+    const order = await placeCashOnDeliveryOrder(user.id, validation.data.orderId);
     return NextResponse.json({ success: true, data: order });
   } catch (error) {
     console.error("Cash on delivery error:", error);
