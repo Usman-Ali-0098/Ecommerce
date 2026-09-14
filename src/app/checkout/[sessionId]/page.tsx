@@ -3,7 +3,9 @@ import { notFound, redirect } from "next/navigation";
 
 import SiteHeader from "@/components/layout/site-header";
 import CheckoutForm from "@/components/payments/checkout-form";
+import ResumeCardPayment from "@/components/payments/resume-card-payment";
 import { getOrderCheckoutForDisplay } from "@/lib/services/order.service";
+import { getRetryPaymentForDisplay } from "@/lib/services/payment.service";
 import { getUserSession } from "@/lib/user-auth";
 
 type CheckoutPageProps = {
@@ -17,11 +19,21 @@ export default async function CheckoutPage({ params }: CheckoutPageProps) {
     redirect("/login");
   }
 
+  // The [sessionId] segment holds either an orderId (a still-unstarted
+  // retry, shown as the full delivery+payment form) or a PaymentAttempt id
+  // (an in-flight card retry, resumed straight into the card form below).
   const { sessionId: orderId } = await params;
   const checkout = await getOrderCheckoutForDisplay(user.id, orderId);
 
   if (!checkout) {
-    notFound();
+    const payment = await getRetryPaymentForDisplay(user.id, orderId);
+    if (!payment) notFound();
+    return (
+      <>
+        <SiteHeader />
+        <main className="min-h-screen bg-[#f7f9fb] px-4 py-8 sm:px-6"><ResumeCardPayment clientSecret={payment.clientSecret} publishableKey={payment.publishableKey} /></main>
+      </>
+    );
   }
 
   return (
@@ -38,7 +50,6 @@ export default async function CheckoutPage({ params }: CheckoutPageProps) {
 
             <CheckoutForm
               orderId={checkout.orderId}
-              orderNumber={checkout.orderNumber}
               shipping={checkout.shipping}
             />
           </section>

@@ -99,11 +99,13 @@ export default async function OrderDetailPage({
             </div>
           </section>
 
-          {order.canRetryPayment ? (
+          {order.canResumePayment || order.canRetryPayment ? (
             <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-semibold text-amber-900">Payment required</p>
               <p className="mt-1 text-xs text-amber-700">
-                Stock will be checked and reserved again before the new payment attempt.
+                {order.canResumePayment
+                  ? "Your secure payment session is still active."
+                  : "You can start a new secure payment session before this order expires."}
               </p>
               <RetryPaymentButton orderId={order.id} />
             </section>

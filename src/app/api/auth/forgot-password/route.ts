@@ -4,7 +4,7 @@ import { render } from "@react-email/render";
 import { NextResponse } from "next/server";
 
 import PasswordResetEmail from "@/emails/password-reset-email";
-import createMailer from "@/lib/mailer";
+import { sendEmailJob } from "@/lib/jobs-client";
 import prisma from "@/lib/prisma";
 import { forgotPasswordSchema } from "@/lib/validations/auth";
 
@@ -52,12 +52,12 @@ export async function POST(request: Request) {
       });
     }
 
-    // 5. Check email configuration
+    // 5. Check config needed to build the reset link. EMAIL_FROM now lives
+    // only in the jobs service's own .env — it does the actual sending.
     const appUrl = process.env.APP_URL;
-    const emailFrom = process.env.EMAIL_FROM;
 
-    if (!appUrl || !emailFrom) {
-      throw new Error("APP_URL or EMAIL_FROM is not configured");
+    if (!appUrl) {
+      throw new Error("APP_URL is not configured");
     }
 
     // 6. Generate the raw token for the email link
@@ -90,7 +90,11 @@ export async function POST(request: Request) {
 
     resetUrl.searchParams.set("token", rawToken);
 
-    // 12. Render and send the password reset email through Gmail SMTP
+    // 12. Render the password reset email, then hand it to the jobs
+    // service to actually send — it dispatches asynchronously via Celery,
+    // so this only confirms the job was accepted, not that the email
+    // arrived. Track delivery via the returned jobId (JobRun table) if
+    // needed.
     const emailHtml = await render(
       createElement(PasswordResetEmail, {
         fullName: user.fullName,
@@ -99,22 +103,18 @@ export async function POST(request: Request) {
     );
 
     try {
-      const mailer = createMailer();
-      const emailData = await mailer.sendMail({
-        from: emailFrom,
+      const { jobId } = await sendEmailJob({
         to: user.email,
         subject: "Reset your password",
         html: emailHtml,
+        requestedBy: user.id,
       });
 
-      console.log("Password reset email accepted:", {
-        messageId: emailData.messageId,
-        userId: user.id,
-      });
+      console.log("Password reset email queued:", { jobId, userId: user.id });
     } catch (emailError) {
       console.error("Password reset email error:", emailError);
 
-      // 13. Remove the token if email delivery failed
+      // 13. Remove the token if the job could not even be queued
       await prisma.passwordResetToken.delete({
         where: {
           tokenHash,

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import SiteHeader from "@/components/layout/site-header";
+import RetryPaymentButton from "@/components/payments/retry-payment-button";
 import { getCheckoutResult } from "@/lib/services/payment.service";
 import { getUserSession } from "@/lib/user-auth";
 import { checkoutSessionParamsSchema } from "@/lib/validations/payment";
@@ -36,16 +37,21 @@ export default async function PaymentFailedPage({ searchParams }: PaymentFailedP
                 <ResultRow label="Order ID" value={result.orderNumber} />
                 <ResultRow label="Payment method" value="Credit / Debit Card" />
                 <ResultRow label="Status" value="Payment failed" />
+                {result.failureCode ? (
+                  <ResultRow label="Reason" value={formatFailureCode(result.failureCode)} />
+                ) : null}
               </div>
             ) : null}
             <div className="mt-4 rounded-lg bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-700">
-              Correct your card details on checkout, or use Retry Payment from the order detail page when available.
+              Your order was saved with an unpaid status. Retry with a new or corrected card, or come back later from your order history.
             </div>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               {result ? (
-                <Link href={`/orders/${result.orderId}`} className="inline-flex h-10 items-center justify-center rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700">
-                  View order detail
-                </Link>
+                <RetryPaymentButton
+                  orderId={result.orderId}
+                  label="Retry payment"
+                  className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
+                />
               ) : null}
               <Link href="/orders" className={`inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 px-4 text-xs font-semibold text-gray-700 hover:bg-gray-50 ${result ? "" : "sm:col-span-2"}`}>
                 Order history
@@ -68,4 +74,11 @@ function ResultRow({ label, value }: { label: string; value: string }) {
       <span className="truncate font-semibold text-gray-900" title={value}>{value}</span>
     </div>
   );
+}
+
+function formatFailureCode(code: string) {
+  return code
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }

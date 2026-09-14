@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { resolveProductImage } from "@/lib/product-image";
+import { publishNotificationUpdate } from "@/lib/notifications/socket-server";
 
 const TAX_RATE = 0.1;
 
@@ -34,9 +35,21 @@ type GetUserOrdersParams = {
   pageSize?: number;
 };
 
+type CheckoutShipping = {
+  shippingName: string;
+  shippingEmail: string;
+  shippingPhone: string;
+  shippingAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+};
+
 type CreateOrderParams = {
   userId: number;
   cartItemIds: string[];
+  paymentMethod?: "CARD" | "CASH_ON_DELIVERY";
+  shipping?: CheckoutShipping;
 };
 
 type SaveShippingSnapshotParams = {
@@ -62,6 +75,11 @@ function createOrderNumber() {
 
   return `ORD-${timestamp}-${random}`;
 }
+
+// TESTING VALUE: 10 minutes, so the expiry/stock-release job is easy to
+// exercise end-to-end. Swap back to a real window (e.g. 3 days) before
+// shipping: 3 * 24 * 60 * 60 * 1000.
+export const PAYMENT_RETRY_LIFETIME_MS = 10 * 60 * 1000;
 
 export async function getUserOrders({
   userId,
@@ -183,7 +201,7 @@ export async function getUserOrderById(userId: number, orderId: string) {
       },
       paymentAttempts: {
         orderBy: { createdAt: "desc" },
-        select: { status: true, stockReleasedAt: true, createdAt: true },
+        select: { status: true, stockReleasedAt: true, stripeCheckoutSessionId: true, expiresAt: true, createdAt: true },
       },
     },
   });
@@ -236,11 +254,21 @@ export async function getUserOrderById(userId: number, orderId: string) {
 
     paymentRetryExpiresAt: order.paymentRetryExpiresAt,
 
+    canResumePayment: Boolean(
+      order.paymentAttempts.find((attempt) =>
+        Boolean(attempt.stripeCheckoutSessionId) &&
+        ["UNPAID", "PROCESSING", "REQUIRES_ACTION"].includes(attempt.status) &&
+        !attempt.stockReleasedAt &&
+        Boolean(attempt.expiresAt && attempt.expiresAt > new Date()),
+      ),
+    ),
+
     canRetryPayment:
       order.status === "PENDING" &&
       ["FAILED", "EXPIRED"].includes(order.paymentStatus) &&
       order.paymentAttempts.length < 3 &&
       Boolean(order.paymentRetryExpiresAt && order.paymentRetryExpiresAt > new Date()) &&
+      !order.stockReleasedAt &&
       Boolean(order.paymentAttempts[0]),
 
     items: order.items.map((item) => {
@@ -288,11 +316,14 @@ export async function getUserOrderById(userId: number, orderId: string) {
   };
 }
 
-export async function createReservedOrder({
+export async function createOrder({
   userId,
   cartItemIds,
+  paymentMethod = "CARD",
+  shipping,
 }: CreateOrderParams) {
   const orderNumber = createOrderNumber();
+  const resolvedPaymentMethod = paymentMethod ?? "CARD";
 
   const order = await prisma.$transaction(
     async (tx) => {
@@ -379,6 +410,11 @@ export async function createReservedOrder({
 
       const total = subtotal + tax;
 
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { fullName: true, email: true, mobile: true },
+      });
+
       const newOrder = await tx.order.create({
         data: {
           orderNumber,
@@ -387,13 +423,25 @@ export async function createReservedOrder({
 
           status: "PENDING",
 
+          paymentMethod: resolvedPaymentMethod,
+
+          paymentStatus: "UNPAID",
+
           subtotal,
 
           tax,
 
           total,
 
-          paymentRetryExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+          shippingName: shipping?.shippingName || user?.fullName || "",
+          shippingEmail: shipping?.shippingEmail || user?.email || "",
+          shippingPhone: shipping?.shippingPhone || user?.mobile || "",
+          shippingAddress: shipping?.shippingAddress || "",
+          shippingCity: shipping?.shippingCity || "",
+          shippingPostalCode: shipping?.shippingPostalCode || "",
+          shippingCountry: shipping?.shippingCountry || "Pakistan",
+
+          paymentRetryExpiresAt: resolvedPaymentMethod === "CARD" ? new Date(Date.now() + PAYMENT_RETRY_LIFETIME_MS) : null,
         },
       });
 
@@ -440,6 +488,7 @@ export async function createReservedOrder({
       const paymentAttempt = await tx.paymentAttempt.create({
         data: {
           orderId: newOrder.id,
+          provider: resolvedPaymentMethod === "CARD" ? "STRIPE" : "CASH_ON_DELIVERY",
           amount: total,
           currency: "pkr",
         },
@@ -484,6 +533,26 @@ export async function createReservedOrder({
         );
       }
 
+      if (resolvedPaymentMethod === "CASH_ON_DELIVERY") {
+        await tx.notification.create({
+          data: {
+            userId,
+            orderId: newOrder.id,
+            type: "ORDER_PLACED",
+            title: "Order Placed",
+            message: `Cash on delivery order ${newOrder.orderNumber} was placed successfully.`,
+          },
+        });
+        await tx.adminNotification.create({
+          data: {
+            orderId: newOrder.id,
+            type: "NEW_ORDER",
+            title: "New Cash on Delivery Order",
+            message: `Cash on delivery order ${newOrder.orderNumber} was placed for Rs. ${Math.round(total).toLocaleString("en-PK")}.`,
+          },
+        });
+      }
+
       return {
         order: newOrder,
         paymentAttempt,
@@ -500,12 +569,18 @@ export async function createReservedOrder({
     },
   );
 
+  if (resolvedPaymentMethod === "CASH_ON_DELIVERY") {
+    publishNotificationUpdate({ userId, notifyAdmins: true });
+  }
+
   return {
     id: order.order.id,
 
     orderNumber: order.order.orderNumber,
 
     status: order.order.status,
+
+    paymentMethod: order.order.paymentMethod,
 
     subtotal: Number(order.order.subtotal),
 
@@ -518,6 +593,8 @@ export async function createReservedOrder({
     items: order.items,
   };
 }
+
+export const createReservedOrder = createOrder;
 
 export async function getOrderCheckoutForDisplay(userId: number, orderId: string) {
   const order = await prisma.order.findFirst({
@@ -570,6 +647,7 @@ export async function saveOrderShippingSnapshot({
       userId,
       status: "PENDING",
       paymentStatus: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION"] },
+      stockReleasedAt: null,
       paymentAttempts: {
         some: {
           stockReleasedAt: null,
@@ -603,7 +681,8 @@ export async function reserveExistingOrderForRetry(userId: number, orderId: stri
       order.status !== "PENDING" ||
       !["FAILED", "EXPIRED"].includes(order.paymentStatus) ||
       !order.paymentRetryExpiresAt ||
-      order.paymentRetryExpiresAt <= new Date()
+      order.paymentRetryExpiresAt <= new Date() ||
+      order.stockReleasedAt !== null
     ) {
       throw new OrderServiceError(
         "ORDER_NOT_RETRYABLE",
@@ -619,7 +698,11 @@ export async function reserveExistingOrderForRetry(userId: number, orderId: stri
     }
 
     const claimed = await tx.order.updateMany({
-      where: { id: order.id, paymentStatus: { in: ["FAILED", "EXPIRED"] } },
+      where: {
+        id: order.id,
+        paymentStatus: { in: ["FAILED", "EXPIRED"] },
+        stockReleasedAt: null,
+      },
       data: { paymentStatus: "UNPAID" },
     });
 

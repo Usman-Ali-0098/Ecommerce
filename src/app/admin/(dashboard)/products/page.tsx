@@ -85,16 +85,25 @@ export default async function AdminProductsPage({
           </p>
         </div>
 
-        <Link
-          href="/admin/products/new"
-          className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700"
-        >
-          <PlusIcon />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/products/import"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 px-4 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+          >
+            Import CSV
+          </Link>
 
-          <span className="ml-1.5">
-            Add Product
-          </span>
-        </Link>
+          <Link
+            href="/admin/products/new"
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <PlusIcon />
+
+            <span className="ml-1.5">
+              Add Product
+            </span>
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

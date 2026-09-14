@@ -3,15 +3,25 @@ import { z } from "zod";
 import { requiredIdSchema } from "@/lib/validations/common";
 
 export const createCheckoutSchema = z.object({
+  paymentMethod: z.enum(["CARD", "CASH_ON_DELIVERY"]).default("CARD"),
   cartItemIds: z
     .array(requiredIdSchema)
     .min(1, "Please select at least one cart item.")
     .max(100, "You can check out at most 100 cart items at once.")
     .transform((ids) => [...new Set(ids)]),
+  shipping: z.lazy(() => shippingAddressSchema).optional(),
 });
 
 export const retryPaymentParamsSchema = z.object({
   orderId: requiredIdSchema,
+});
+
+export const checkoutDraftParamsSchema = z.object({
+  checkoutId: requiredIdSchema,
+});
+
+export const cashOnDeliveryDraftSchema = z.object({
+  checkoutId: requiredIdSchema,
 });
 
 export const shippingAddressSchema = z.object({

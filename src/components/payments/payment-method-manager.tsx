@@ -3,11 +3,33 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import {
+  CardCvcElement,
+  CardExpiryElement,
+  CardNumberElement,
+  Elements,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 
 import Alert from "@/components/ui/alert";
 import { useAlert } from "@/hooks/use-alert";
+
+// Classic per-field card elements — same as checkout — instead of the
+// auto-rendering PaymentElement, which pulls in Link enrollment prompts and
+// a "save my info" panel that can't be fully suppressed via its options.
+const CLASSIC_ELEMENT_OPTIONS = {
+  style: {
+    base: {
+      fontSize: "14px",
+      color: "#111827",
+      fontFamily: "inherit",
+      "::placeholder": { color: "#9ca3af" },
+    },
+    invalid: { color: "#dc2626" },
+  },
+};
 
 type SavedPaymentMethod = {
   id: string;
@@ -27,7 +49,13 @@ type Props = {
   initialPaymentMethods: SavedPaymentMethod[];
 };
 
-function AddPaymentMethodForm({ onComplete }: { onComplete: () => void }) {
+function AddPaymentMethodForm({
+  clientSecret,
+  onComplete,
+}: {
+  clientSecret: string;
+  onComplete: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const { alert, showAlert, closeAlert } = useAlert();
@@ -40,16 +68,16 @@ function AddPaymentMethodForm({ onComplete }: { onComplete: () => void }) {
       return;
     }
 
+    const cardNumberElement = elements.getElement(CardNumberElement);
+    if (!cardNumberElement) {
+      return;
+    }
+
     try {
       setIsSaving(true);
-      const result = await stripe.confirmSetup({
-        elements,
-        redirect: "if_required",
-        confirmParams: {
-          return_url: `${window.location.origin}/account/payment-methods`,
-          payment_method_data: {
-            allow_redisplay: "always",
-          },
+      const result = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: {
+          card: cardNumberElement,
         },
       });
 
@@ -72,7 +100,26 @@ function AddPaymentMethodForm({ onComplete }: { onComplete: () => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <PaymentElement options={{ layout: "tabs" }} />
+      <div>
+        <label className="block text-xs font-medium text-gray-600">Card number</label>
+        <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+          <CardNumberElement options={CLASSIC_ELEMENT_OPTIONS} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600">Expiration (MM/YY)</label>
+          <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+            <CardExpiryElement options={CLASSIC_ELEMENT_OPTIONS} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600">Security code</label>
+          <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+            <CardCvcElement options={CLASSIC_ELEMENT_OPTIONS} />
+          </div>
+        </div>
+      </div>
       <button type="submit" disabled={!stripe || isSaving} className="h-10 w-full rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300">
         {isSaving ? "Saving..." : "Save payment method"}
       </button>
@@ -191,8 +238,8 @@ export default function PaymentMethodManager({ initialPaymentMethods }: Props) {
               <h2 className="text-base font-semibold text-gray-900">Add payment method</h2>
               <button type="button" onClick={() => setSetupData(null)} className="text-xl text-gray-400 hover:text-gray-700" aria-label="Close">×</button>
             </div>
-            <Elements stripe={stripePromise} options={{ clientSecret: setupData.clientSecret, appearance: { theme: "stripe", variables: { colorPrimary: "#087ff5", borderRadius: "8px" } } }}>
-              <AddPaymentMethodForm onComplete={finishSetup} />
+            <Elements stripe={stripePromise}>
+              <AddPaymentMethodForm clientSecret={setupData.clientSecret} onComplete={finishSetup} />
             </Elements>
           </div>
         </div>

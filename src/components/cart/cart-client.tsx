@@ -26,7 +26,8 @@ type PlaceOrderResponse = {
   message?: string;
 
   data?: {
-    orderId: string;
+    orderId?: string;
+    checkoutId?: string;
   };
 };
 
@@ -313,9 +314,9 @@ export default function CartClient({ cart }: CartClientProps) {
     }
   }
 
-  // / PLACE ORDER
+  // PROCEED TO CHECKOUT
 
-  async function placeOrder() {
+  function placeOrder() {
     if (selectedItemIds.length === 0) {
       showAlert("Please select at least one product.", {
         variant: "warning",
@@ -324,53 +325,7 @@ export default function CartClient({ cart }: CartClientProps) {
       return;
     }
 
-    try {
-      setIsPlacingOrder(true);
-
-      const response = await fetch("/api/orders", {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          cartItemIds: selectedItemIds,
-        }),
-      });
-
-      /*
-       * Read response once.
-       */
-      const result = (await response.json()) as PlaceOrderResponse;
-
-      if (!response.ok || !result.success || !result.data) {
-        showAlert(result.message ?? "Unable to place order.", {
-          variant: "error",
-        });
-
-        return;
-      }
-
-      setSelectedItemIds([]);
-
-      /*
-       * The selected cart rows have moved into a reserved unpaid order.
-       * A Stripe Checkout Session is created later, only if card payment is chosen.
-       */
-
-      notifyCartUpdated();
-
-      router.push(`/checkout/${encodeURIComponent(result.data.orderId)}`);
-    } catch (error) {
-      console.error("Place order request error:", error);
-
-      showAlert("Something went wrong while placing the order.", {
-        variant: "error",
-      });
-    } finally {
-      setIsPlacingOrder(false);
-    }
+    router.push(`/checkout?items=${encodeURIComponent(selectedItemIds.join(","))}`);
   }
 
   return (

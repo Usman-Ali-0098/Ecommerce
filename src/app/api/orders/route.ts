@@ -4,10 +4,14 @@ import { auth } from "@/auth";
 import { getUserSession } from "@/lib/user-auth";
 
 import {
-  createReservedOrder,
+  createOrder,
   getUserOrders,
   OrderServiceError,
 } from "@/lib/services/order.service";
+import {
+  createStripePaymentIntentForAttempt,
+  PaymentServiceError,
+} from "@/lib/services/payment.service";
 import { validateRequest } from "@/lib/validate-request";
 import { orderListQuerySchema } from "@/lib/validations/order";
 import { createCheckoutSchema } from "@/lib/validations/payment";
@@ -135,18 +139,42 @@ export async function POST(request: Request) {
       return validation.response;
     }
 
-    const { cartItemIds } = validation.data;
+    const { cartItemIds, paymentMethod, shipping } = validation.data;
 
-    const order = await createReservedOrder({
+    const order = await createOrder({
       userId: user.id,
       cartItemIds,
+      paymentMethod,
+      shipping,
     });
+
+    let clientSecret: string | null = null;
+    let publishableKey: string | null = null;
+
+    if (paymentMethod === "CARD") {
+      const stripeData = await createStripePaymentIntentForAttempt({
+        userId: user.id,
+        paymentAttemptId: order.paymentAttemptId,
+      });
+      clientSecret = stripeData.clientSecret;
+      publishableKey = stripeData.publishableKey;
+    }
 
     return NextResponse.json(
       {
         success: true,
-        message: "Order placed successfully.",
-        data: { orderId: order.id },
+        message:
+          paymentMethod === "CASH_ON_DELIVERY"
+            ? "Cash on delivery order placed successfully."
+            : "Order created successfully. Ready for card payment.",
+        data: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          paymentAttemptId: order.paymentAttemptId,
+          checkoutId: order.id,
+          clientSecret,
+          publishableKey,
+        },
       },
       {
         status: 201,
@@ -155,7 +183,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Place order error:", error);
 
-    if (error instanceof OrderServiceError) {
+    if (error instanceof OrderServiceError || error instanceof PaymentServiceError) {
       return NextResponse.json(
         {
           success: false,

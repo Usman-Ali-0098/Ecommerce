@@ -203,6 +203,7 @@ model Order {
   user               User                @relation(fields: [userId], references: [id])
   items              OrderItem[]
   paymentAttempts    PaymentAttempt[]
+  stockReleasedAt     DateTime?
 
   @@index([userId])
   @@index([status])
@@ -232,7 +233,6 @@ model PaymentAttempt {
   @@index([status])
   @@index([expiresAt])
 }
-
 
 model StripeWebhookEvent {
   id          String   @id
@@ -294,6 +294,56 @@ model AdminNotification {
   @@index([orderId])
 }
 
+// Written by the FastAPI/Celery jobs service (raw SQL, not Prisma) when it
+// accepts and processes a job; read here via Prisma so the app can poll
+// status/results without round-tripping through FastAPI. Prisma still owns
+// the schema/migrations for these tables.
+model JobRun {
+  id          String       @id @default(cuid())
+  type        JobType
+  status      JobStatus    @default(QUEUED)
+  requestedBy Int?
+  summary     String?
+  error       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  items       JobRunItem[]
+
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model JobRunItem {
+  id        String    @id @default(cuid())
+  jobRunId  String
+  jobRun    JobRun    @relation(fields: [jobRunId], references: [id], onDelete: Cascade)
+  rowIndex  Int?
+  status    JobStatus @default(QUEUED)
+  message   String?
+  productId String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([jobRunId])
+  @@index([status])
+}
+
+enum JobType {
+  EMAIL
+  PRODUCT_IMPORT
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
 enum Role {
   USER
   ADMIN
@@ -315,7 +365,9 @@ enum OrderPaymentMethod {
 
 enum PaymentProvider {
   STRIPE
+  CASH_ON_DELIVERY
 }
+
 
 enum PaymentStatus {
   NOT_REQUIRED

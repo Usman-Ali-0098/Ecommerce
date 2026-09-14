@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { OrderServiceError } from "@/lib/services/order.service";
-import { createStripeRetryCheckout } from "@/lib/services/payment.service";
+import { createStripeRetryPaymentIntent } from "@/lib/services/payment.service";
 import { getUserSession } from "@/lib/user-auth";
 import { validateRequest } from "@/lib/validate-request";
 import { retryPaymentParamsSchema } from "@/lib/validations/payment";
@@ -18,10 +18,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     const validation = validateRequest(retryPaymentParamsSchema, await params);
     if (!validation.success) return validation.response;
 
-    const checkout = await createStripeRetryCheckout({
+    const checkout = await createStripeRetryPaymentIntent({
       userId: user.id,
       orderId: validation.data.orderId,
-      returnUrlBase: new URL(request.url).origin,
     });
 
     return NextResponse.json({ success: true, data: checkout }, { status: 201 });

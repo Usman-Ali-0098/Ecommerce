@@ -1,8 +1,13 @@
+import { createElement } from "react";
+
+import { render } from "@react-email/render";
 import Stripe from "stripe";
 
+import OrderInvoiceEmail from "@/emails/order-invoice-email";
+import { sendEmailJob } from "@/lib/jobs-client";
 import { prisma } from "@/lib/prisma";
 import {
-  createReservedOrder,
+  createOrder,
   reserveExistingOrderForRetry,
 } from "@/lib/services/order.service";
 import { ensureStripeCustomer } from "@/lib/services/stripe-customer.service";
@@ -38,7 +43,7 @@ export async function createStripeCheckout({
   returnUrlBase,
 }: CreateStripeCheckoutParams) {
   const customerId = await ensureStripeCustomer({ userId });
-  const reservedOrder = await createReservedOrder({ userId, cartItemIds });
+  const reservedOrder = await createOrder({ userId, cartItemIds });
   return createCheckoutSessionForReservedOrder({
     userId,
     customerId,
@@ -47,23 +52,54 @@ export async function createStripeCheckout({
   });
 }
 
-export async function createStripeRetryCheckout({
+/**
+ * Retry uses the exact same mechanism as a fresh checkout — a plain
+ * PaymentIntent behind <Elements>/<PaymentElement> — instead of the separate
+ * Stripe Checkout Session flow below. Mixing the two was the source of the
+ * "cart item invalid" bug: they're different Stripe primitives with
+ * different lookup keys, and reused inconsistently.
+ */
+export async function createStripeRetryPaymentIntent({
   userId,
   orderId,
-  returnUrlBase,
 }: {
   userId: number;
   orderId: string;
-  returnUrlBase: string;
 }) {
-  const customerId = await ensureStripeCustomer({ userId });
-  const reservedOrder = await reserveExistingOrderForRetry(userId, orderId);
-  return createCheckoutSessionForReservedOrder({
-    userId,
-    customerId,
-    reservedOrder,
-    returnUrlBase,
+  const activeAttempt = await prisma.paymentAttempt.findFirst({
+    where: {
+      orderId,
+      order: { userId, status: "PENDING", paymentStatus: { in: ["UNPAID", "PROCESSING", "REQUIRES_ACTION"] } },
+      status: { in: ["UNPAID", "PROCESSING", "REQUIRES_ACTION"] },
+      stripePaymentIntentId: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
   });
+
+  if (activeAttempt?.stripePaymentIntentId) {
+    const intent = await getStripe().paymentIntents.retrieve(activeAttempt.stripePaymentIntentId);
+    if (!["succeeded", "canceled"].includes(intent.status) && intent.client_secret) {
+      return {
+        orderId,
+        paymentAttemptId: activeAttempt.id,
+        clientSecret: intent.client_secret,
+        publishableKey: getStripePublishableKey(),
+      };
+    }
+  }
+
+  const reservedOrder = await reserveExistingOrderForRetry(userId, orderId);
+  const stripeData = await createStripePaymentIntentForAttempt({
+    userId,
+    paymentAttemptId: reservedOrder.paymentAttemptId,
+  });
+
+  return {
+    orderId,
+    paymentAttemptId: reservedOrder.paymentAttemptId,
+    clientSecret: stripeData.clientSecret,
+    publishableKey: stripeData.publishableKey,
+  };
 }
 
 /** Starts Stripe only after the customer explicitly selects card payment. */
@@ -116,6 +152,55 @@ export async function createStripeCheckoutForOrder({
     returnUrlBase,
   });
 }
+
+export async function createStripePaymentIntentForAttempt({
+  userId,
+  paymentAttemptId,
+}: {
+  userId: number;
+  paymentAttemptId: string;
+}) {
+  const attempt = await prisma.paymentAttempt.findUnique({
+    where: { id: paymentAttemptId },
+    include: { order: true },
+  });
+
+  if (!attempt || attempt.order.userId !== userId) {
+    throw new PaymentServiceError("Payment attempt not found.");
+  }
+
+  const customerId = await ensureStripeCustomer({ userId });
+  const paymentIntent = await getStripe().paymentIntents.create({
+    amount: toMinorUnits(Number(attempt.amount)),
+    currency: attempt.currency,
+    customer: customerId,
+    // Card only: the client uses the classic per-field card elements, which
+    // never offer Link or other alternative payment methods anyway, but this
+    // keeps the PaymentIntent itself restricted too.
+    payment_method_types: ["card"],
+    // Not set here: the client passes setup_future_usage at confirm time
+    // (stripe.confirmCardPayment), driven by the "save this card" checkbox.
+    metadata: {
+      localOrderId: attempt.orderId,
+      localPaymentAttemptId: attempt.id,
+      localUserId: userId.toString(),
+    },
+  });
+
+  await prisma.paymentAttempt.update({
+    where: { id: attempt.id },
+    data: {
+      stripePaymentIntentId: paymentIntent.id,
+    },
+  });
+
+  return {
+    clientSecret: paymentIntent.client_secret,
+    paymentIntentId: paymentIntent.id,
+    publishableKey: getStripePublishableKey(),
+  };
+}
+
 
 async function createCheckoutSessionForReservedOrder({
   userId,
@@ -367,6 +452,40 @@ export async function getCheckoutForDisplay(userId: number, sessionId: string) {
   };
 }
 
+/** Resume view for a retried card payment: same PaymentIntent-based
+ * mechanism as a fresh checkout, looked up by PaymentAttempt id rather than
+ * a Stripe Checkout Session id. */
+export async function getRetryPaymentForDisplay(userId: number, paymentAttemptId: string) {
+  const attempt = await prisma.paymentAttempt.findFirst({
+    where: {
+      id: paymentAttemptId,
+      order: { userId },
+    },
+    include: { order: true },
+  });
+
+  if (
+    !attempt ||
+    !attempt.stripePaymentIntentId ||
+    ["PAID", "EXPIRED", "CANCELED"].includes(attempt.status)
+  ) {
+    return null;
+  }
+
+  const intent = await getStripe().paymentIntents.retrieve(attempt.stripePaymentIntentId);
+
+  if (!intent.client_secret || ["succeeded", "canceled"].includes(intent.status)) {
+    return null;
+  }
+
+  return {
+    clientSecret: intent.client_secret,
+    publishableKey: getStripePublishableKey(),
+    orderId: attempt.order.id,
+    orderNumber: attempt.order.orderNumber,
+  };
+}
+
 type ClosePaymentAttemptParams = {
   paymentAttemptId: string;
   status: "FAILED" | "EXPIRED" | "CANCELED";
@@ -424,12 +543,102 @@ async function closePaymentAttempt({
     await tx.order.update({
       where: { id: attempt.orderId },
       data: {
-        status: finalFailure ? "CANCELLED" : "PENDING",
-        paymentStatus: finalFailure ? "CANCELED" : status,
-        ...(finalFailure ? { cancelledAt: new Date() } : {}),
+        // The expiry job owns the terminal cancellation because it also owns
+        // the idempotent inventory release. Reaching the attempt limit makes
+        // the order eligible for that job immediately.
+        status: "PENDING",
+        paymentStatus: status,
+        ...(finalFailure ? { paymentRetryExpiresAt: new Date() } : {}),
       },
     });
   });
+}
+
+async function releaseOrderStock(orderId: string) {
+  return prisma.$transaction(async (tx) => {
+    // Claim the terminal cancellation and stock release atomically.
+    const cancelled = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        status: "PENDING",
+        paymentStatus: { in: ["UNPAID", "FAILED", "EXPIRED", "PROCESSING", "REQUIRES_ACTION"] },
+        paymentRetryExpiresAt: { lte: new Date() },
+        stockReleasedAt: null,
+      },
+      data: {
+        status: "CANCELLED",
+        paymentStatus: "CANCELED",
+        cancelledAt: new Date(),
+        stockReleasedAt: new Date(),
+      },
+    });
+    if (cancelled.count !== 1) return null;
+
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      select: { userId: true, orderNumber: true },
+    });
+
+    const items = await tx.orderItem.findMany({
+      where: { orderId },
+      select: { variantId: true, quantity: true },
+    });
+    for (const item of items) {
+      if (item.variantId) {
+        await tx.productVariant.update({
+          where: { id: item.variantId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+    }
+    await tx.paymentAttempt.updateMany({
+      where: { orderId, stockReleasedAt: null, status: { not: "PAID" } },
+      data: { status: "CANCELED", stockReleasedAt: new Date() },
+    });
+
+    if (!order) return null;
+
+    await tx.notification.create({
+      data: {
+        userId: order.userId,
+        orderId,
+        type: "ORDER_CANCELLED",
+        title: "Order Cancelled",
+        message: `Order ${order.orderNumber} was cancelled because payment was not completed in time.`,
+      },
+    });
+    await tx.adminNotification.create({
+      data: {
+        orderId,
+        type: "ORDER_CANCELLED",
+        title: "Order Cancelled (Payment Expired)",
+        message: `Order ${order.orderNumber} was cancelled after its payment window expired.`,
+      },
+    });
+
+    return { userId: order.userId };
+  });
+}
+
+/** Safety net for orders whose payment-retry window elapsed. It is safe to run
+ * repeatedly: Order.stockReleasedAt acts as the idempotent gate. */
+export async function releaseExpiredStockReservations() {
+  const expired = await prisma.order.findMany({
+    where: {
+      status: "PENDING",
+      paymentStatus: { not: "PAID" },
+      paymentRetryExpiresAt: { lte: new Date() },
+      stockReleasedAt: null,
+    },
+    select: { id: true },
+  });
+  const results = await Promise.all(expired.map(({ id }) => releaseOrderStock(id)));
+  for (const result of results) {
+    if (result) {
+      publishNotificationUpdate({ userId: result.userId, notifyAdmins: true });
+    }
+  }
+  return { releasedOrders: results.filter((result) => result !== null).length };
 }
 
 async function finalizePaidAttempt(
@@ -446,7 +655,9 @@ async function finalizePaidAttempt(
       !attempt ||
       attempt.status === "PAID" ||
       attempt.status === "CANCELED" ||
-      attempt.stockReleasedAt
+      attempt.stockReleasedAt ||
+      attempt.order.status === "CANCELLED" ||
+      attempt.order.paymentStatus === "CANCELED"
     ) {
       return;
     }
@@ -495,14 +706,119 @@ async function finalizePaidAttempt(
       },
     });
 
-    return { userId: attempt.order.userId };
+    const items = await tx.orderItem.findMany({
+      where: { orderId: attempt.order.id },
+      select: {
+        productName: true,
+        sku: true,
+        colorName: true,
+        sizeName: true,
+        quantity: true,
+        unitPrice: true,
+        lineTotal: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return {
+      userId: attempt.order.userId,
+      invoice: attempt.order.shippingEmail
+        ? {
+            to: attempt.order.shippingEmail,
+            customerName: attempt.order.shippingName ?? "Customer",
+            orderNumber: attempt.order.orderNumber,
+            subtotal: Number(attempt.order.subtotal),
+            tax: Number(attempt.order.tax),
+            total: Number(attempt.order.total),
+            items: items.map((item) => ({
+              productName: item.productName,
+              sku: item.sku,
+              colorName: item.colorName,
+              sizeName: item.sizeName,
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+              lineTotal: Number(item.lineTotal),
+            })),
+            shippingAddress: {
+              name: attempt.order.shippingName,
+              address: attempt.order.shippingAddress,
+              city: attempt.order.shippingCity,
+              postalCode: attempt.order.shippingPostalCode,
+              country: attempt.order.shippingCountry,
+            },
+          }
+        : null,
+    };
   });
 
   if (notificationTarget) {
+    if (paymentIntentId) {
+      await rememberPaymentMethodFromIntent(paymentIntentId);
+    }
     publishNotificationUpdate({
       userId: notificationTarget.userId,
       notifyAdmins: true,
     });
+    if (notificationTarget.invoice) {
+      await sendInvoiceEmail(notificationTarget.userId, notificationTarget.invoice);
+    }
+  }
+}
+
+/** Queues the order invoice email once payment is confirmed. Best-effort:
+ * a failure to queue the email must not undo the already-finalized payment,
+ * so this only logs — it doesn't throw back into finalizePaidAttempt. */
+async function sendInvoiceEmail(
+  userId: number,
+  invoice: {
+    to: string;
+    customerName: string;
+    orderNumber: string;
+    subtotal: number;
+    tax: number;
+    total: number;
+    items: Array<{
+      productName: string;
+      sku: string;
+      colorName: string | null;
+      sizeName: string | null;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+    }>;
+    shippingAddress: {
+      name: string | null;
+      address: string | null;
+      city: string | null;
+      postalCode: string | null;
+      country: string | null;
+    };
+  },
+) {
+  try {
+    const html = await render(
+      createElement(OrderInvoiceEmail, {
+        customerName: invoice.customerName,
+        orderNumber: invoice.orderNumber,
+        paidAt: new Date(),
+        items: invoice.items,
+        subtotal: invoice.subtotal,
+        tax: invoice.tax,
+        total: invoice.total,
+        shippingAddress: invoice.shippingAddress,
+      }),
+    );
+
+    const { jobId } = await sendEmailJob({
+      to: invoice.to,
+      subject: `Invoice for order ${invoice.orderNumber}`,
+      html,
+      requestedBy: userId,
+    });
+
+    console.log("Order invoice email queued:", { jobId, orderNumber: invoice.orderNumber });
+  } catch (error) {
+    console.error("Unable to queue order invoice email:", error);
   }
 }
 
@@ -527,21 +843,21 @@ async function findAttemptIdForSession(session: Stripe.Checkout.Session) {
   return attempt?.id ?? null;
 }
 
-async function rememberSuccessfulPaymentMethod(session: Stripe.Checkout.Session) {
-  const customerId =
-    typeof session.customer === "string" ? session.customer : session.customer?.id;
-  const paymentIntentId = paymentIntentIdFromSession(session);
-
-  if (!customerId || !paymentIntentId) return;
-
+/** Saves the card used for a successful payment as the customer's default,
+ * so it appears next time via the account's saved payment methods. Driven by
+ * setup_future_usage on the PaymentIntent (see createStripePaymentIntentForAttempt),
+ * which is also what makes the Payment Element show the "save card" checkbox. */
+async function rememberPaymentMethodFromIntent(paymentIntentId: string) {
   try {
     const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+    const customerId =
+      typeof intent.customer === "string" ? intent.customer : intent.customer?.id;
     const paymentMethodId =
       typeof intent.payment_method === "string"
         ? intent.payment_method
         : intent.payment_method?.id;
 
-    if (!paymentMethodId) return;
+    if (!customerId || !paymentMethodId) return;
 
     await getStripe().customers.update(customerId, {
       invoice_settings: { default_payment_method: paymentMethodId },
@@ -554,6 +870,12 @@ async function rememberSuccessfulPaymentMethod(session: Stripe.Checkout.Session)
     // Payment finalization must not fail because default-card preference failed.
     console.error("Unable to remember Stripe default payment method:", error);
   }
+}
+
+async function rememberSuccessfulPaymentMethod(session: Stripe.Checkout.Session) {
+  const paymentIntentId = paymentIntentIdFromSession(session);
+  if (!paymentIntentId) return;
+  await rememberPaymentMethodFromIntent(paymentIntentId);
 }
 
 export async function processStripeWebhook(event: Stripe.Event) {
@@ -611,6 +933,13 @@ export async function processStripeWebhook(event: Stripe.Event) {
         failureCode: "checkout_session_expired",
       });
     }
+  } else if (event.type === "payment_intent.succeeded") {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    const attemptId = intent.metadata.localPaymentAttemptId;
+
+    if (attemptId) {
+      await finalizePaidAttempt(attemptId, intent.id);
+    }
   } else if (
     event.type === "payment_intent.processing" ||
     event.type === "payment_intent.payment_failed"
@@ -656,13 +985,19 @@ export async function processStripeWebhook(event: Stripe.Event) {
   });
 }
 
-export async function getCheckoutResult(userId: number, sessionId: string) {
+export async function getCheckoutResult(userId: number, identifier: string) {
   const attempt = await prisma.paymentAttempt.findFirst({
     where: {
-      stripeCheckoutSessionId: sessionId,
       order: { userId },
+      OR: [
+        { stripeCheckoutSessionId: identifier },
+        { stripePaymentIntentId: identifier },
+        { id: identifier },
+        { orderId: identifier },
+      ],
     },
     include: { order: true },
+    orderBy: { createdAt: "desc" },
   });
 
   if (!attempt) {
@@ -670,11 +1005,28 @@ export async function getCheckoutResult(userId: number, sessionId: string) {
   }
 
   if (attempt.status !== "PAID") {
-    const session = await getStripe().checkout.sessions.retrieve(sessionId);
-
-    if (session.payment_status === "paid") {
-      await finalizePaidAttempt(attempt.id, paymentIntentIdFromSession(session));
-      await rememberSuccessfulPaymentMethod(session);
+    if (attempt.stripeCheckoutSessionId) {
+      const session = await getStripe().checkout.sessions.retrieve(attempt.stripeCheckoutSessionId);
+      if (session.payment_status === "paid") {
+        await finalizePaidAttempt(attempt.id, paymentIntentIdFromSession(session));
+        await rememberSuccessfulPaymentMethod(session);
+      }
+    } else if (attempt.stripePaymentIntentId) {
+      const intent = await getStripe().paymentIntents.retrieve(attempt.stripePaymentIntentId);
+      if (intent.status === "succeeded") {
+        await finalizePaidAttempt(attempt.id, intent.id);
+      } else if (intent.status === "requires_payment_method" || intent.status === "canceled") {
+        // Sync the failure eagerly instead of waiting on the payment_intent.payment_failed
+        // webhook, so the failed-payment page has accurate details as soon as it loads.
+        await closePaymentAttempt({
+          paymentAttemptId: attempt.id,
+          status: intent.status === "canceled" ? "CANCELED" : "FAILED",
+          failureCode:
+            intent.last_payment_error?.decline_code ??
+            intent.last_payment_error?.code ??
+            undefined,
+        });
+      }
     }
   }
 
@@ -693,5 +1045,6 @@ export async function getCheckoutResult(userId: number, sessionId: string) {
     paymentMethod: current.order.paymentMethod,
     paymentStatus: current.status,
     amount: Number(current.amount),
+    failureCode: current.failureCode,
   };
 }

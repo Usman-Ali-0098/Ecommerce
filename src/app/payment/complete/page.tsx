@@ -7,7 +7,11 @@ import { getUserSession } from "@/lib/user-auth";
 import { checkoutSessionParamsSchema } from "@/lib/validations/payment";
 
 type PaymentCompletePageProps = {
-  searchParams: Promise<{ session_id?: string }>;
+  searchParams: Promise<{
+    session_id?: string;
+    order_id?: string;
+    payment_intent?: string;
+  }>;
 };
 
 export default async function PaymentCompletePage({
@@ -20,15 +24,13 @@ export default async function PaymentCompletePage({
   }
 
   const query = await searchParams;
-  const validation = checkoutSessionParamsSchema.safeParse({
-    sessionId: query.session_id,
-  });
+  const lookupId = query.session_id || query.order_id || query.payment_intent;
 
-  if (!validation.success) {
+  if (!lookupId) {
     redirect("/payment/failed?reason=invalid_session");
   }
 
-  const result = await getCheckoutResult(user.id, validation.data.sessionId);
+  const result = await getCheckoutResult(user.id, lookupId);
 
   if (!result) {
     redirect("/payment/failed?reason=session_not_found");
@@ -36,9 +38,7 @@ export default async function PaymentCompletePage({
 
   if (["FAILED", "EXPIRED", "CANCELED"].includes(result.paymentStatus)) {
     redirect(
-      `/payment/failed?session_id=${encodeURIComponent(
-        validation.data.sessionId,
-      )}`,
+      `/payment/failed?session_id=${encodeURIComponent(lookupId)}`,
     );
   }
 
