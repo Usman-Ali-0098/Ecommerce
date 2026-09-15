@@ -3,6 +3,7 @@ import Link from "next/link";
 import AdminProductFilters from "@/components/admin/products/admin-product-filters";
 import AdminProductsPagination from "@/components/admin/products/admin-products-pagination";
 import AdminProductsTable from "@/components/admin/products/admin-products-table";
+import BulkImportTrigger from "@/components/admin/products/bulk-import-trigger";
 
 import { getAdminProducts } from "@/lib/services/admin-product.service";
 import { prisma } from "@/lib/prisma";
@@ -43,6 +44,8 @@ export default async function AdminProductsPage({
   const [
     productResult,
     categories,
+    colors,
+    sizes,
   ] = await Promise.all([
     getAdminProducts({
       search,
@@ -60,7 +63,18 @@ export default async function AdminProductsPage({
         id: true,
         name: true,
         slug: true,
+        isActive: true,
       },
+    }),
+
+    prisma.color.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, hexacode: true, isActive: true },
+    }),
+
+    prisma.size.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, sortOrder: true, isActive: true },
     }),
   ]);
 
@@ -86,12 +100,11 @@ export default async function AdminProductsPage({
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/admin/products/import"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 px-4 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-          >
-            Import CSV
-          </Link>
+          <BulkImportTrigger
+            categories={categories}
+            colors={colors}
+            sizes={sizes}
+          />
 
           <Link
             href="/admin/products/new"

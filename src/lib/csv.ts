@@ -62,9 +62,14 @@ export type CsvVariantRow = {
   sku: string;
   price: string;
   stock: string;
+  image: string;
 };
 
-const EXPECTED_HEADERS = ["productName", "description", "category", "color", "size", "sku", "price", "stock"];
+const EXPECTED_HEADERS = ["productName", "category", "color", "size", "sku", "price", "stock"];
+
+// "description" and "image" are both optional headers — a CSV can omit
+// either column entirely and still parse. "image" holds the filename of the
+// product's image (bulk-import-modal.tsx matches on it).
 
 export function parseProductCsv(text: string): { rows: CsvVariantRow[]; error?: string } {
   const table = parseCsv(text);
@@ -81,13 +86,14 @@ export function parseProductCsv(text: string): { rows: CsvVariantRow[]; error?: 
   const indexOf = (name: string) => header.indexOf(name);
   const rows = table.slice(1).map((cells) => ({
     productName: (cells[indexOf("productName")] ?? "").trim(),
-    description: (cells[indexOf("description")] ?? "").trim(),
+    description: header.includes("description") ? (cells[indexOf("description")] ?? "").trim() : "",
     category: (cells[indexOf("category")] ?? "").trim(),
     color: (cells[indexOf("color")] ?? "").trim(),
     size: (cells[indexOf("size")] ?? "").trim(),
     sku: (cells[indexOf("sku")] ?? "").trim(),
     price: (cells[indexOf("price")] ?? "").trim(),
     stock: (cells[indexOf("stock")] ?? "").trim(),
+    image: header.includes("image") ? (cells[indexOf("image")] ?? "").trim() : "",
   }));
 
   return { rows };

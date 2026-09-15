@@ -1,0 +1,4 @@
+productName,description,category,color,size,sku,price,stock,image
+Example T-Shirt,Soft cotton crew-neck t-shirt.,Apparel,Black,M,EX-TS-BLK-M,799,40,example-tshirt-black.jpg
+Example T-Shirt,Soft cotton crew-neck t-shirt.,Apparel,Blue,L,EX-TS-BLU-L,799,35,example-tshirt-black.jpg
+Example Headphones,Wireless over-ear headphones.,Electronics,Black,,EX-HP-BLK,4499,20,example-headphones.jpg

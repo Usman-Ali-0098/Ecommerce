@@ -78,13 +78,20 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   //  STATE
 
-  const initialVariant = product.image?.colorId
+  // Prefer the variant matching the primary image's color (if it's tagged
+  // to one); otherwise still auto-select the first in-stock colored variant,
+  // so a product with color variants always starts with one selected —
+  // regardless of whether its primary photo happens to be color-specific or
+  // a general shot shared across colors.
+  const initialVariant =
+    (product.image?.colorId
       ? product.variants.find(
-        (variant) =>
-          variant.color?.id === product.image?.colorId &&
-          variant.stock > 0,
-      )
-    : undefined;
+          (variant) =>
+            variant.color?.id === product.image?.colorId &&
+            variant.stock > 0,
+        )
+      : undefined) ??
+    product.variants.find((variant) => variant.color && variant.stock > 0);
 
   const [selectedSizeId, setSelectedSizeId] = useState(
     initialVariant?.size?.id ?? "",
@@ -371,7 +378,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       {/* Product Image Gallery */}
 
       <div
-        className="group relative mx-3 mt-3 h-47.5 overflow-hidden rounded-[3px] bg-[#f5f5f5]"
+        className="group relative h-60 overflow-hidden bg-[#f5f5f5]"
         onMouseEnter={handleImageMouseEnter}
         onMouseLeave={handleImageMouseLeave}
       >

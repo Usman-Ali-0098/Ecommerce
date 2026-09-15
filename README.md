@@ -88,3 +88,6 @@ place `sk_test_...` or `whsec_...` values in browser code or source control.
   - Re-reserve stock when Retry Payment is clicked.
   - Create a new PaymentAttempt, never a duplicate order.
   - Never accept payment unless that retry successfully reserves stock first.
+
+
+Running Sneakers,Shoe,white,L,RT6-SNK-WHT-L,3499,18,sneakers.jpg 
