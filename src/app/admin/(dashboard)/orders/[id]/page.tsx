@@ -127,7 +127,7 @@ export default async function AdminOrderDetailPage({ params }: PageProps) {
             <table className="w-full min-w-190 border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-4 py-2.5">Product</th>
+                  <th className="px-4 py-2.5">Items</th>
 
                   <th className="px-4 py-2.5">Price</th>
 
@@ -335,9 +335,8 @@ function SummaryItem({
       </p>
 
       <p
-        className={`mt-1 truncate text-xs ${
-          strong ? "font-semibold text-blue-600" : "font-medium text-gray-800"
-        }`}
+        className={`mt-1 truncate text-xs ${strong ? "font-semibold text-blue-600" : "font-medium text-gray-800"
+          }`}
       >
         {value}
       </p>
@@ -390,9 +389,8 @@ function CurrentStock({ stock }: { stock: number | null }) {
 
   return (
     <span
-      className={`text-xs font-medium ${
-        stock > 0 ? "text-gray-700" : "text-red-600"
-      }`}
+      className={`text-xs font-medium ${stock > 0 ? "text-gray-700" : "text-red-600"
+        }`}
     >
       {stock}
     </span>

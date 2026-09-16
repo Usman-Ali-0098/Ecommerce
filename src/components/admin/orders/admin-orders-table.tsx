@@ -36,7 +36,7 @@ export default function AdminOrdersTable({ orders }: Props) {
 
             <th className="px-4 py-3">Date</th>
 
-            <th className="px-4 py-3">Items</th>
+            <th className="px-4 py-3">Product</th>
 
             <th className="px-4 py-3">Total</th>
 
@@ -144,15 +144,14 @@ function PaymentStatus({ status }: { status: string }) {
   const processing = status === "PROCESSING" || status === "REQUIRES_ACTION";
 
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-      notRequired
-        ? "bg-gray-100 text-gray-600"
-        : paid
-          ? "bg-green-50 text-green-700"
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${notRequired
+      ? "bg-gray-100 text-gray-600"
+      : paid
+        ? "bg-green-50 text-green-700"
         : processing
           ? "bg-amber-50 text-amber-700"
           : "bg-red-50 text-red-700"
-    }`}>
+      }`}>
       {notRequired ? "Legacy" : paid ? "Paid" : processing ? "Processing" : "Unpaid"}
     </span>
   );
