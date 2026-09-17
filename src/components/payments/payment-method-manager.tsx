@@ -31,6 +31,14 @@ const CLASSIC_ELEMENT_OPTIONS = {
   },
 };
 
+// CardNumberElement still shows Stripe's own "Autofill"/Link button unless
+// explicitly turned off — disableLink is only valid on this element, not on
+// CardExpiryElement/CardCvcElement.
+const CARD_NUMBER_ELEMENT_OPTIONS = {
+  ...CLASSIC_ELEMENT_OPTIONS,
+  disableLink: true,
+};
+
 type SavedPaymentMethod = {
   id: string;
   brand: string;
@@ -102,21 +110,36 @@ function AddPaymentMethodForm({
     <form onSubmit={submit} className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-gray-600">Card number</label>
-        <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-          <CardNumberElement options={CLASSIC_ELEMENT_OPTIONS} />
+        <div className="group mt-1 flex items-center gap-2.5 rounded-lg border border-gray-300 px-3 py-2.5 transition focus-within:border-[#087ff5] focus-within:ring-1 focus-within:ring-[#087ff5]">
+          <span className="shrink-0 text-gray-400 transition-colors group-focus-within:text-[#087ff5]">
+            <CardIcon />
+          </span>
+          <div className="min-w-0 flex-1">
+            <CardNumberElement options={CARD_NUMBER_ELEMENT_OPTIONS} />
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-600">Expiration (MM/YY)</label>
-          <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-            <CardExpiryElement options={CLASSIC_ELEMENT_OPTIONS} />
+          <div className="group mt-1 flex items-center gap-2.5 rounded-lg border border-gray-300 px-3 py-2.5 transition focus-within:border-[#087ff5] focus-within:ring-1 focus-within:ring-[#087ff5]">
+            <span className="shrink-0 text-gray-400 transition-colors group-focus-within:text-[#087ff5]">
+              <CalendarIcon />
+            </span>
+            <div className="min-w-0 flex-1">
+              <CardExpiryElement options={CLASSIC_ELEMENT_OPTIONS} />
+            </div>
           </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600">Security code</label>
-          <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-            <CardCvcElement options={CLASSIC_ELEMENT_OPTIONS} />
+          <div className="group mt-1 flex items-center gap-2.5 rounded-lg border border-gray-300 px-3 py-2.5 transition focus-within:border-[#087ff5] focus-within:ring-1 focus-within:ring-[#087ff5]">
+            <span className="shrink-0 text-gray-400 transition-colors group-focus-within:text-[#087ff5]">
+              <LockIcon />
+            </span>
+            <div className="min-w-0 flex-1">
+              <CardCvcElement options={CLASSIC_ELEMENT_OPTIONS} />
+            </div>
           </div>
         </div>
       </div>
@@ -126,6 +149,58 @@ function AddPaymentMethodForm({
       <p className="text-center text-[11px] text-gray-400">Sandbox cards only. No real payment is taken.</p>
       {alert ? <Alert message={alert.message} variant={alert.variant} onClose={closeAlert} /> : null}
     </form>
+  );
+}
+
+function CardIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
   );
 }
 

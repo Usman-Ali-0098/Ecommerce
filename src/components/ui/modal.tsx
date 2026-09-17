@@ -11,6 +11,7 @@ type ModalProps = {
   open: boolean;
   title?: string;
   description?: string;
+  icon?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
@@ -22,6 +23,7 @@ export default function Modal({
   open,
   title,
   description,
+  icon,
   children,
   footer,
   onClose,
@@ -81,24 +83,32 @@ export default function Modal({
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[#dee2e6] px-6 py-5">
-          <div className="min-w-0">
-            {title ? (
-              <h2
-                id="modal-title"
-                className="text-xl font-medium text-[#212529]"
-              >
-                {title}
-              </h2>
+          <div className="flex min-w-0 items-start gap-3">
+            {icon ? (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#087ff5]">
+                {icon}
+              </span>
             ) : null}
 
-            {description ? (
-              <p
-                id="modal-description"
-                className="mt-2 text-sm leading-6 text-[#6c757d]"
-              >
-                {description}
-              </p>
-            ) : null}
+            <div className="min-w-0">
+              {title ? (
+                <h2
+                  id="modal-title"
+                  className="text-xl font-medium text-[#212529]"
+                >
+                  {title}
+                </h2>
+              ) : null}
+
+              {description ? (
+                <p
+                  id="modal-description"
+                  className="mt-2 text-sm leading-6 text-[#6c757d]"
+                >
+                  {description}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <button

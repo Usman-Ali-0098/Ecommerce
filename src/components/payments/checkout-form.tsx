@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   CardCvcElement,
@@ -57,6 +58,14 @@ const CLASSIC_ELEMENT_OPTIONS = {
     },
     invalid: { color: "#dc2626" },
   },
+};
+
+// CardNumberElement still shows Stripe's own "Autofill"/Link button on top
+// of everything above unless explicitly turned off — disableLink is only a
+// valid option on this element, not on CardExpiryElement/CardCvcElement.
+const CARD_NUMBER_ELEMENT_OPTIONS = {
+  ...CLASSIC_ELEMENT_OPTIONS,
+  disableLink: true,
 };
 
 function billingDetailsFor(shipping: Shipping) {
@@ -170,21 +179,36 @@ function CardEntryFields({
         <div className="space-y-3 rounded-lg border border-gray-200 p-4">
           <div>
             <label className="block text-xs font-medium text-gray-600">Card number</label>
-            <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-              <CardNumberElement options={CLASSIC_ELEMENT_OPTIONS} />
+            <div className="group mt-1 flex items-center gap-2.5 rounded-lg border border-gray-300 px-3 py-2.5 transition focus-within:border-[#087ff5] focus-within:ring-1 focus-within:ring-[#087ff5]">
+              <span className="shrink-0 text-gray-400 transition-colors group-focus-within:text-[#087ff5]">
+                <CardIcon />
+              </span>
+              <div className="min-w-0 flex-1">
+                <CardNumberElement options={CARD_NUMBER_ELEMENT_OPTIONS} />
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600">Expiration (MM/YY)</label>
-              <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-                <CardExpiryElement options={CLASSIC_ELEMENT_OPTIONS} />
+              <div className="group mt-1 flex items-center gap-2.5 rounded-lg border border-gray-300 px-3 py-2.5 transition focus-within:border-[#087ff5] focus-within:ring-1 focus-within:ring-[#087ff5]">
+                <span className="shrink-0 text-gray-400 transition-colors group-focus-within:text-[#087ff5]">
+                  <CalendarIcon />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <CardExpiryElement options={CLASSIC_ELEMENT_OPTIONS} />
+                </div>
               </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600">Security code</label>
-              <div className="mt-1 rounded-lg border border-gray-300 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-                <CardCvcElement options={CLASSIC_ELEMENT_OPTIONS} />
+              <div className="group mt-1 flex items-center gap-2.5 rounded-lg border border-gray-300 px-3 py-2.5 transition focus-within:border-[#087ff5] focus-within:ring-1 focus-within:ring-[#087ff5]">
+                <span className="shrink-0 text-gray-400 transition-colors group-focus-within:text-[#087ff5]">
+                  <LockIcon />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <CardCvcElement options={CLASSIC_ELEMENT_OPTIONS} />
+                </div>
               </div>
             </div>
           </div>
@@ -193,7 +217,7 @@ function CardEntryFields({
               type="checkbox"
               checked={saveCard}
               onChange={(event) => onSaveCardChange(event.target.checked)}
-              className="h-3.5 w-3.5 rounded border-gray-300"
+              className="h-3.5 w-3.5 rounded border-gray-300 accent-[#087ff5]"
             />
             Save this card for future purchases
           </label>
@@ -558,8 +582,8 @@ export default function CheckoutForm({
         <div className="space-y-5">
           <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-xs">
             <div>
-              <p className="font-semibold">{shipping.shippingName}</p>
-              <p className="text-gray-500">
+              <p className="text-sm font-semibold text-gray-900">{shipping.shippingName}</p>
+              <p className="mt-0.5 text-gray-500">
                 {shipping.shippingAddress}, {shipping.shippingCity}{" "}
                 {shipping.shippingPostalCode}
               </p>
@@ -584,6 +608,7 @@ export default function CheckoutForm({
                 selected={choice === "cod"}
                 title="Cash on delivery"
                 description="Pay when your order arrives"
+                icon={<CashIcon />}
                 onClick={() => {
                   setChoice("cod");
                   setError(null);
@@ -593,6 +618,7 @@ export default function CheckoutForm({
                 selected={choice === "card"}
                 title="Credit / debit card"
                 description="Pay securely with Stripe"
+                icon={<CardIcon />}
                 onClick={() => {
                   setChoice("card");
                   setError(null);
@@ -653,28 +679,120 @@ function Choice({
   selected,
   title,
   description,
+  icon,
   onClick,
 }: {
   selected: boolean;
   title: string;
   description: string;
+  icon: ReactNode;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border p-3 text-left transition ${
+      className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition ${
         selected
-          ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+          ? "border-[#087ff5] bg-blue-50 ring-1 ring-[#087ff5]"
           : "border-gray-200 bg-white hover:border-gray-300"
       }`}
     >
-      <span className="text-xs font-semibold text-gray-900">{title}</span>
-      <span className="mt-1 block text-[10px] text-gray-500">
-        {description}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+            selected ? "border-[#087ff5]" : "border-gray-300"
+          }`}
+        >
+          {selected ? <span className="h-2 w-2 rounded-full bg-[#087ff5]" /> : null}
+        </span>
+
+        <div>
+          <span className="block text-xs font-semibold text-gray-900">{title}</span>
+          <span className="mt-1 block text-[10px] text-gray-500">
+            {description}
+          </span>
+        </div>
+      </div>
+
+      <span
+        aria-hidden="true"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[#087ff5]"
+      >
+        {icon}
       </span>
     </button>
+  );
+}
+
+function CashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M6 12h.01M18 12h.01" />
+    </svg>
+  );
+}
+
+function CardIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
   );
 }
 

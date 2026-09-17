@@ -63,7 +63,19 @@ export default function CartItemRow({
       </td>
 
       <td className="px-4 py-3 text-gray-600">
-        {item.variant.color?.name ?? "—"}
+        {item.variant.color ? (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="h-3 w-3 shrink-0 rounded-full border border-gray-300"
+              style={{ backgroundColor: item.variant.color.hexacode ?? "#e5e7eb" }}
+              aria-hidden="true"
+            />
+
+            <span>{item.variant.color.name}</span>
+          </div>
+        ) : (
+          "—"
+        )}
       </td>
 
       <td className="px-4 py-3 text-gray-600">

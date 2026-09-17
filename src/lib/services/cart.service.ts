@@ -73,6 +73,7 @@ export async function getUserCart(userId: number) {
           ? {
               id: item.variant.color.id,
               name: item.variant.color.name,
+              hexacode: item.variant.color.hexacode,
             }
           : null,
 

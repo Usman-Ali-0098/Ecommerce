@@ -3,7 +3,18 @@
 import { useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { Download, ImageUp, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  FolderOpen,
+  ImageUp,
+  Images,
+  PackageCheck,
+  PackagePlus,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import Image from "next/image";
 
 import Alert from "@/components/ui/alert";
@@ -306,30 +317,40 @@ export default function BulkImportModal({ open, onClose, categories, colors, siz
         onClose={handleClose}
         title="Add Multiple Products"
         description="Upload a CSV, optionally add images, then review on the next screen."
+        icon={<PackagePlus className="h-5 w-5" />}
         className="max-w-xl"
       >
-        <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-0.5 sm:max-h-[75vh]">
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-0.5 sm:max-h-[75vh]">
           <a
             href="/templates/product-import-template.csv"
             download
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-50 py-2 pl-2 pr-3 text-xs font-semibold text-[#087ff5] transition hover:bg-blue-100"
           >
-            <Download size={13} />
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[#087ff5] shadow-sm">
+              <Download size={13} />
+            </span>
             Download CSV template
           </a>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="text-xs font-medium text-gray-700">Product CSV</p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#087ff5]">
+                  <FileSpreadsheet size={14} />
+                </span>
+                <p className="text-xs font-semibold text-gray-800">Product CSV</p>
+              </div>
 
-              <label className="mt-2 flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-2 text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-2 text-xs font-medium text-gray-700 transition hover:border-[#087ff5] hover:bg-blue-50 hover:text-[#087ff5]">
+                <UploadCloud size={14} />
                 {csvFileName ? "Change CSV file" : "Select CSV file"}
                 <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
               </label>
 
               {csvFileName ? (
-                <p className="mt-1.5 truncate text-[10px] text-gray-500" title={csvFileName}>
-                  {csvFileName}
+                <p className="mt-1.5 flex items-center gap-1 truncate text-[10px] font-medium text-green-700" title={csvFileName}>
+                  <CheckCircle2 size={11} className="shrink-0" />
+                  <span className="truncate">{csvFileName}</span>
                 </p>
               ) : (
                 <p className="mt-1.5 text-[10px] leading-tight text-gray-400">
@@ -339,10 +360,15 @@ export default function BulkImportModal({ open, onClose, categories, colors, siz
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="text-xs font-medium text-gray-700">Images (optional)</p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600">
+                  <Images size={14} />
+                </span>
+                <p className="text-xs font-semibold text-gray-800">Images (optional)</p>
+              </div>
 
-              <div className="mt-2 flex gap-1.5">
-                <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-gray-300 px-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50">
+              <div className="mt-2.5 flex gap-1.5">
+                <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-gray-300 px-1 text-[11px] font-medium text-gray-700 transition hover:border-violet-400 hover:bg-violet-50 hover:text-violet-700">
                   <ImageUp size={13} />
                   Files
                   <input
@@ -353,8 +379,8 @@ export default function BulkImportModal({ open, onClose, categories, colors, siz
                     onChange={handleImageFilesSelected}
                   />
                 </label>
-                <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-gray-300 px-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50">
-                  <ImageUp size={13} />
+                <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-gray-300 px-1 text-[11px] font-medium text-gray-700 transition hover:border-violet-400 hover:bg-violet-50 hover:text-violet-700">
+                  <FolderOpen size={13} />
                   Folder
                   <input
                     type="file"
@@ -394,7 +420,8 @@ export default function BulkImportModal({ open, onClose, categories, colors, siz
           ) : null}
 
           {pendingProducts.length > 0 ? (
-            <div className="rounded-lg bg-blue-50 px-3 py-2 text-[11px] font-medium text-blue-800">
+            <div className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-[11px] font-medium text-blue-800">
+              <PackageCheck size={14} className="shrink-0 text-[#087ff5]" />
               {pendingProducts.length} product{pendingProducts.length === 1 ? "" : "s"} · {totalVariants} variant(s)
               {pendingImages.length > 0 ? <> · {pendingImages.length} image(s)</> : null}
             </div>

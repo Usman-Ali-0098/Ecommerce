@@ -72,7 +72,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
               </p>
             </div>
           ) : (
-            <>
+            <div className="mx-4 sm:mx-8 lg:mx-14">
               <OrdersTable orders={orders} />
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -89,7 +89,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                   totalPages={pagination.totalPages}
                 />
               </div>
-            </>
+            </div>
           )}
         </div>
       </main>
