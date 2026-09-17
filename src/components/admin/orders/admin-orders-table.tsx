@@ -113,7 +113,10 @@ export default function AdminOrdersTable({ orders }: Props) {
               </td>
 
               <td className="px-4 py-3">
-                <PaymentStatus status={order.paymentStatus} />
+                <PaymentStatus
+                  status={order.paymentStatus}
+                  paymentMethod={order.paymentMethod}
+                />
               </td>
 
               {/* Action */}
@@ -138,21 +141,30 @@ export default function AdminOrdersTable({ orders }: Props) {
   );
 }
 
-function PaymentStatus({ status }: { status: string }) {
+function PaymentStatus({
+  status,
+  paymentMethod,
+}: {
+  status: string;
+  paymentMethod: string;
+}) {
   const paid = status === "PAID";
   const notRequired = status === "NOT_REQUIRED";
   const processing = status === "PROCESSING" || status === "REQUIRES_ACTION";
+  const cod = paymentMethod === "CASH_ON_DELIVERY" && status === "UNPAID";
 
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${notRequired
-      ? "bg-gray-100 text-gray-600"
-      : paid
-        ? "bg-green-50 text-green-700"
-        : processing
-          ? "bg-amber-50 text-amber-700"
-          : "bg-red-50 text-red-700"
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${cod
+      ? "bg-blue-50 text-blue-700"
+      : notRequired
+        ? "bg-gray-100 text-gray-600"
+        : paid
+          ? "bg-green-50 text-green-700"
+          : processing
+            ? "bg-amber-50 text-amber-700"
+            : "bg-red-50 text-red-700"
       }`}>
-      {notRequired ? "Legacy" : paid ? "Paid" : processing ? "Processing" : "Unpaid"}
+      {cod ? "COD" : notRequired ? "Legacy" : paid ? "Paid" : processing ? "Processing" : "Unpaid"}
     </span>
   );
 }

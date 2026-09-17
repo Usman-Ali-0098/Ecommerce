@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import SiteHeader from "@/components/layout/site-header";
+import ReorderPanel from "@/components/orders/reorder-panel";
 import RetryPaymentButton from "@/components/payments/retry-payment-button";
 
 import { getUserOrderById } from "@/lib/services/order.service";
@@ -71,17 +72,19 @@ export default async function OrderDetailPage({
               <OrderMeta
                 label="Payment"
                 value={
-                  order.paymentStatus === "NOT_REQUIRED"
-                    ? "Legacy order"
-                    : order.paymentStatus === "PAID"
-                      ? "Paid"
-                      : order.paymentStatus === "PROCESSING" || order.paymentStatus === "REQUIRES_ACTION"
-                        ? "Processing"
-                        : order.paymentStatus === "FAILED" || order.paymentStatus === "EXPIRED"
-                          ? "Retry required"
-                          : order.paymentStatus === "CANCELED"
-                            ? "Cancelled"
-                            : "Unpaid"
+                  order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "UNPAID"
+                    ? "COD"
+                    : order.paymentStatus === "NOT_REQUIRED"
+                      ? "Legacy order"
+                      : order.paymentStatus === "PAID"
+                        ? "Paid"
+                        : order.paymentStatus === "PROCESSING" || order.paymentStatus === "REQUIRES_ACTION"
+                          ? "Processing"
+                          : order.paymentStatus === "FAILED" || order.paymentStatus === "EXPIRED"
+                            ? "Retry required"
+                            : order.paymentStatus === "CANCELED"
+                              ? "Cancelled"
+                              : "Unpaid"
                 }
               />
 
@@ -99,12 +102,12 @@ export default async function OrderDetailPage({
             </div>
           </section>
 
-          {order.canResumePayment || order.canRetryPayment ? (
+          {order.canRetryPayment ? (
             <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-semibold text-amber-900">Payment required</p>
               <p className="mt-1 text-xs text-amber-700">
-                {order.canResumePayment
-                  ? "Your secure payment session is still active."
+                {order.hasActivePaymentAttempt
+                  ? "Your secure payment session is still active — continue where you left off."
                   : "You can start a new secure payment session before this order expires."}
               </p>
               <RetryPaymentButton orderId={order.id} />
@@ -225,6 +228,10 @@ export default async function OrderDetailPage({
               </table>
             </div>
           </section>
+
+          {order.status === "CANCELLED" ? (
+            <ReorderPanel items={order.items} />
+          ) : null}
         </div>
       </main>
     </>

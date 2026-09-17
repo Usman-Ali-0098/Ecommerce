@@ -72,11 +72,13 @@ export default async function AdminOrderDetailPage({ params }: PageProps) {
         <SummaryItem
           label="Payment"
           value={
-            order.paymentStatus === "NOT_REQUIRED"
-              ? "Legacy"
-              : order.paymentStatus === "PAID"
-                ? "Paid"
-                : "Unpaid"
+            order.paymentMethod === "CASH_ON_DELIVERY" && order.paymentStatus === "UNPAID"
+              ? "COD"
+              : order.paymentStatus === "NOT_REQUIRED"
+                ? "Legacy"
+                : order.paymentStatus === "PAID"
+                  ? "Paid"
+                  : "Unpaid"
           }
           secondary={order.paymentStatus}
         />

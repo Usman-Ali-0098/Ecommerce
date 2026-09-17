@@ -14,3 +14,7 @@ export const addCartItemSchema = z.object({
 export const updateCartItemSchema = z.object({
   quantity: z.coerce.number().int().positive("Quantity must be at least 1."),
 });
+
+export const deleteCartItemsSchema = z.object({
+  itemIds: z.array(requiredIdSchema).min(1, "Select at least one item to remove."),
+});

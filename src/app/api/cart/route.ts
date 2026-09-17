@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/user-auth";
 import { validateRequest } from "@/lib/validate-request";
-import { addCartItemSchema } from "@/lib/validations/cart";
+import { addCartItemSchema, deleteCartItemsSchema } from "@/lib/validations/cart";
 
 export async function POST(request: Request) {
   try {
@@ -186,7 +186,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
     const session = await auth();
 
@@ -213,8 +213,21 @@ export async function DELETE() {
       );
     }
 
+    const body = await request.json();
+    const validation = validateRequest(deleteCartItemsSchema, body);
+
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    const { itemIds } = validation.data;
+
+    // Scoped to the selected items only — this is "delete selected", not
+    // "clear the whole cart". cart.userId still enforces that a user can
+    // only ever delete their own rows.
     const deleted = await prisma.cartItem.deleteMany({
       where: {
+        id: { in: itemIds },
         cart: {
           userId: user.id,
         },
@@ -232,10 +245,10 @@ export async function DELETE() {
       },
     });
   } catch (error) {
-    console.error("Delete all cart items error:", error);
+    console.error("Delete cart items error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Unable to clear the cart." },
+      { success: false, message: "Unable to remove the selected products." },
       { status: 500 },
     );
   }

@@ -17,7 +17,6 @@ import { publishNotificationUpdate } from "@/lib/notifications/socket-server";
 // Stripe Checkout requires at least 30 minutes. Its expiration webhook releases
 // abandoned reservations without requiring an application-level scheduler.
 const STRIPE_CHECKOUT_EXPIRATION_SECONDS = 31 * 60;
-const MAX_PAYMENT_ATTEMPTS = 3;
 const CURRENCY = "pkr";
 
 type CreateStripeCheckoutParams = {
@@ -501,11 +500,7 @@ async function closePaymentAttempt({
     const attempt = await tx.paymentAttempt.findUnique({
       where: { id: paymentAttemptId },
       include: {
-        order: {
-          include: {
-            paymentAttempts: { select: { id: true } },
-          },
-        },
+        order: true,
       },
     });
 
@@ -533,22 +528,17 @@ async function closePaymentAttempt({
       return;
     }
 
-    const retryWindowEnded =
-      !attempt.order.paymentRetryExpiresAt ||
-      attempt.order.paymentRetryExpiresAt <= new Date();
-    const finalFailure =
-      attempt.order.paymentAttempts.length >= MAX_PAYMENT_ATTEMPTS ||
-      retryWindowEnded;
-
     await tx.order.update({
       where: { id: attempt.orderId },
       data: {
-        // The expiry job owns the terminal cancellation because it also owns
-        // the idempotent inventory release. Reaching the attempt limit makes
-        // the order eligible for that job immediately.
+        // No attempt-count limit any more — paymentRetryExpiresAt (fixed at
+        // order creation) is the only deadline for how long this order can
+        // still be retried, so it's left untouched here. The expiry job
+        // owns terminal cancellation and the idempotent inventory release,
+        // and now keys off that same field, so the order becomes eligible
+        // for it the moment paymentRetryExpiresAt naturally passes.
         status: "PENDING",
         paymentStatus: status,
-        ...(finalFailure ? { paymentRetryExpiresAt: new Date() } : {}),
       },
     });
   });

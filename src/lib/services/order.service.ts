@@ -14,8 +14,7 @@ type OrderServiceErrorCode =
   | "INVALID_QUANTITY"
   | "INSUFFICIENT_STOCK"
   | "CART_CHANGED"
-  | "ORDER_NOT_RETRYABLE"
-  | "RETRY_LIMIT_REACHED";
+  | "ORDER_NOT_RETRYABLE";
 
 export class OrderServiceError extends Error {
   code: OrderServiceErrorCode;
@@ -193,6 +192,11 @@ export async function getUserOrderById(userId: number, orderId: string) {
                       position: "asc",
                     },
                   },
+                  category: {
+                    select: {
+                      isActive: true,
+                    },
+                  },
                 },
               },
             },
@@ -214,6 +218,32 @@ export async function getUserOrderById(userId: number, orderId: string) {
     (sum, item) => sum + item.quantity,
     0,
   );
+
+  // Reorder needs to know how much of each variant is already sitting in
+  // the cart, so a revisit shows "already in your cart" instead of a blank
+  // "Add to cart" button that would just pile more on top on every click.
+  // Only fetched for cancelled orders — every other order status renders
+  // exactly as before, at no extra query cost.
+  const cartQuantityByVariant: Record<string, number> = {};
+  if (order.status === "CANCELLED") {
+    const variantIds = order.items
+      .map((item) => item.variantId)
+      .filter((id): id is string => Boolean(id));
+
+    if (variantIds.length > 0) {
+      const cartItems = await prisma.cartItem.findMany({
+        where: {
+          cart: { userId },
+          variantId: { in: variantIds },
+        },
+        select: { variantId: true, quantity: true },
+      });
+
+      for (const cartItem of cartItems) {
+        cartQuantityByVariant[cartItem.variantId] = cartItem.quantity;
+      }
+    }
+  }
 
   return {
     id: order.id,
@@ -254,22 +284,31 @@ export async function getUserOrderById(userId: number, orderId: string) {
 
     paymentRetryExpiresAt: order.paymentRetryExpiresAt,
 
-    canResumePayment: Boolean(
+    // Whether there's an attempt currently in flight — used only to pick
+    // banner wording ("resume" vs "start a new attempt"), never to decide
+    // whether the retry button shows at all. The previous version gated
+    // visibility on this (and specifically on stripeCheckoutSessionId,
+    // which retry-created attempts never set since they're PaymentIntent-
+    // based), so the button vanished the instant a retry was started but
+    // not finished. createStripeRetryPaymentIntent already resumes an
+    // open attempt instead of duplicating it, so visibility only needs to
+    // track the order-level retry budget below.
+    hasActivePaymentAttempt: Boolean(
       order.paymentAttempts.find((attempt) =>
-        Boolean(attempt.stripeCheckoutSessionId) &&
         ["UNPAID", "PROCESSING", "REQUIRES_ACTION"].includes(attempt.status) &&
-        !attempt.stockReleasedAt &&
-        Boolean(attempt.expiresAt && attempt.expiresAt > new Date()),
+        !attempt.stockReleasedAt,
       ),
     ),
 
+    // No attempt-count cap — paymentRetryExpiresAt is the sole deadline for
+    // how long an order can still be paid, so that's the only thing that
+    // should gate this off.
     canRetryPayment:
       order.status === "PENDING" &&
-      ["FAILED", "EXPIRED"].includes(order.paymentStatus) &&
-      order.paymentAttempts.length < 3 &&
+      order.paymentMethod === "CARD" &&
+      order.paymentStatus !== "PAID" &&
       Boolean(order.paymentRetryExpiresAt && order.paymentRetryExpiresAt > new Date()) &&
-      !order.stockReleasedAt &&
-      Boolean(order.paymentAttempts[0]),
+      !order.stockReleasedAt,
 
     items: order.items.map((item) => {
       const currentImage = item.variant
@@ -286,6 +325,17 @@ export async function getUserOrderById(userId: number, orderId: string) {
           altText: item.imageAltText,
         }
         : currentImage;
+
+      // Reorder needs to know, per item, whether it can still be bought
+      // today — the variant/product/category can all have been deactivated
+      // or sold out since this order was placed, independent of each other.
+      const isPurchasable = Boolean(
+        item.variant &&
+        item.variant.isActive &&
+        item.variant.product.isActive &&
+        item.variant.product.category.isActive,
+      );
+      const currentStock = isPurchasable ? item.variant!.stock : 0;
 
       return {
         id: item.id,
@@ -311,6 +361,15 @@ export async function getUserOrderById(userId: number, orderId: string) {
             altText: image.altText,
           }
           : null,
+
+        availability: {
+          variantId: item.variantId,
+          available: currentStock > 0,
+          stock: currentStock,
+          inCartQuantity: item.variantId
+            ? (cartQuantityByVariant[item.variantId] ?? 0)
+            : 0,
+        },
       };
     }),
   };
@@ -672,7 +731,6 @@ export async function reserveExistingOrderForRetry(userId: number, orderId: stri
       where: { id: orderId, userId },
       include: {
         items: true,
-        paymentAttempts: { select: { id: true } },
       },
     });
 
@@ -690,13 +748,10 @@ export async function reserveExistingOrderForRetry(userId: number, orderId: stri
       );
     }
 
-    if (order.paymentAttempts.length >= 3) {
-      throw new OrderServiceError(
-        "RETRY_LIMIT_REACHED",
-        "The maximum number of payment attempts has been reached.",
-      );
-    }
-
+    // No cap on attempt count — a customer can retry as many times as they
+    // like, as long as they're still inside paymentRetryExpiresAt. That
+    // fixed deadline (not an attempt tally) is what actually determines
+    // whether the order is still payable.
     const claimed = await tx.order.updateMany({
       where: {
         id: order.id,

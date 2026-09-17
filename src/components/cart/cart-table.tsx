@@ -20,7 +20,7 @@ type CartTableProps = {
 
   onDeleteItem: (itemId: string) => void;
 
-  onDeleteAll: () => void;
+  onDeleteSelected: () => void;
   isDeletingAll: boolean;
 };
 
@@ -34,19 +34,30 @@ export default function CartTable({
   onToggleAll,
   onUpdateQuantity,
   onDeleteItem,
-  onDeleteAll,
+  onDeleteSelected,
   isDeletingAll,
 }: CartTableProps) {
+  const selectedCount = selectedItemIds.length;
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-center justify-end border-b border-gray-200 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2.5">
+        <span className="text-xs text-gray-500">
+          {selectedCount > 0
+            ? `${selectedCount} of ${items.length} selected`
+            : "No items selected"}
+        </span>
+
         <button
           type="button"
-          onClick={onDeleteAll}
-          disabled={items.length === 0 || isDeletingAll}
-          className="rounded-md px-3 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onDeleteSelected}
+          disabled={selectedCount === 0 || isDeletingAll}
+          className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isDeletingAll ? "Deleting..." : "Delete All"}
+          <TrashIcon />
+          {isDeletingAll
+            ? "Deleting..."
+            : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ""}`}
         </button>
       </div>
 
@@ -100,5 +111,30 @@ export default function CartTable({
         </table>
       </div>
     </div>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16" />
+
+      <path d="M9 7V4h6v3" />
+
+      <path d="M6 7l1 13h10l1-13" />
+
+      <path d="M10 11v5" />
+
+      <path d="M14 11v5" />
+    </svg>
   );
 }

@@ -56,7 +56,10 @@ export default function OrdersTable({ orders }: OrdersTableProps) {
               </td>
 
               <td className="px-4 py-4">
-                <PaymentStatusBadge status={order.paymentStatus} />
+                <PaymentStatusBadge
+                  status={order.paymentStatus}
+                  paymentMethod={order.paymentMethod}
+                />
               </td>
 
               <td className="px-4 py-3 text-right">
@@ -76,31 +79,42 @@ export default function OrdersTable({ orders }: OrdersTableProps) {
   );
 }
 
-function PaymentStatusBadge({ status }: { status: UserOrder["paymentStatus"] }) {
+function PaymentStatusBadge({
+  status,
+  paymentMethod,
+}: {
+  status: UserOrder["paymentStatus"];
+  paymentMethod: UserOrder["paymentMethod"];
+}) {
   const paid = status === "PAID";
   const notRequired = status === "NOT_REQUIRED";
   const processing = status === "PROCESSING" || status === "REQUIRES_ACTION";
-  const label = notRequired
-    ? "Legacy"
-    : paid
-      ? "Paid"
-      : processing
-        ? "Processing"
-        : status === "FAILED" || status === "EXPIRED"
-          ? "Retry required"
-          : status === "CANCELED"
-            ? "Cancelled"
-            : "Unpaid";
+  const cod = paymentMethod === "CASH_ON_DELIVERY" && status === "UNPAID";
+  const label = cod
+    ? "COD"
+    : notRequired
+      ? "Legacy"
+      : paid
+        ? "Paid"
+        : processing
+          ? "Processing"
+          : status === "FAILED" || status === "EXPIRED"
+            ? "Retry required"
+            : status === "CANCELED"
+              ? "Cancelled"
+              : "Unpaid";
 
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-      notRequired
-        ? "bg-gray-100 text-gray-600"
-        : paid
-          ? "bg-green-50 text-green-700"
-        : processing
-          ? "bg-amber-50 text-amber-700"
-          : "bg-red-50 text-red-700"
+      cod
+        ? "bg-blue-50 text-blue-700"
+        : notRequired
+          ? "bg-gray-100 text-gray-600"
+          : paid
+            ? "bg-green-50 text-green-700"
+          : processing
+            ? "bg-amber-50 text-amber-700"
+            : "bg-red-50 text-red-700"
     }`}>
       {label}
     </span>

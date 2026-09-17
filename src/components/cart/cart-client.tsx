@@ -279,34 +279,65 @@ export default function CartClient({ cart }: CartClientProps) {
     }
   }
 
+  function requestDeleteSelected() {
+    if (selectedItemIds.length === 0) {
+      showAlert("Please select at least one product to delete.", {
+        variant: "warning",
+      });
+
+      return;
+    }
+
+    setIsDeleteAllOpen(true);
+  }
+
   async function confirmDeleteAll() {
+    const idsToDelete = selectedItemIds;
+
+    if (idsToDelete.length === 0) {
+      setIsDeleteAllOpen(false);
+      return;
+    }
+
     try {
       setIsDeletingAll(true);
 
       const response = await fetch("/api/cart", {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ itemIds: idsToDelete }),
       });
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        showAlert(result.message ?? "Unable to clear the cart.", {
+        showAlert(result.message ?? "Unable to remove the selected products.", {
           variant: "error",
         });
 
         return;
       }
 
-      setDisplayedItems([]);
-      setSelectedItemIds([]);
+      setDisplayedItems((current) =>
+        current.filter((item) => !idsToDelete.includes(item.id)),
+      );
+      setSelectedItemIds((current) =>
+        current.filter((id) => !idsToDelete.includes(id)),
+      );
       setIsDeleteAllOpen(false);
+
+      showAlert(result.message ?? "Selected products removed from cart.", {
+        variant: "success",
+      });
 
       notifyCartUpdated();
       router.refresh();
     } catch (error) {
-      console.error("Delete all cart items error:", error);
+      console.error("Delete selected cart items error:", error);
 
-      showAlert("Something went wrong while clearing the cart.", {
+      showAlert("Something went wrong while removing the selected products.", {
         variant: "error",
       });
     } finally {
@@ -340,7 +371,7 @@ export default function CartClient({ cart }: CartClientProps) {
         onToggleAll={toggleAll}
         onUpdateQuantity={updateQuantity}
         onDeleteItem={requestDelete}
-        onDeleteAll={() => setIsDeleteAllOpen(true)}
+        onDeleteSelected={requestDeleteSelected}
         isDeletingAll={isDeletingAll}
       />
 
@@ -361,9 +392,9 @@ export default function CartClient({ cart }: CartClientProps) {
       <DeleteCartItemModal
         open={isDeleteAllOpen}
         isDeleting={isDeletingAll}
-        title="Clear Cart?"
-        description="Are you sure you want to remove all products from your cart?"
-        confirmLabel="Delete All"
+        title="Delete Selected Items?"
+        description={`Remove ${selectedItemIds.length} selected item(s) from your cart? Unselected items will stay in your cart.`}
+        confirmLabel="Delete Selected"
         onCancel={() => {
           if (!isDeletingAll) setIsDeleteAllOpen(false);
         }}
