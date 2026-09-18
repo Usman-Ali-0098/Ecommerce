@@ -77,7 +77,15 @@ export async function createStripeRetryPaymentIntent({
 
   if (activeAttempt?.stripePaymentIntentId) {
     const intent = await getStripe().paymentIntents.retrieve(activeAttempt.stripePaymentIntentId);
-    if (!["succeeded", "canceled"].includes(intent.status) && intent.client_secret) {
+    // Only resume a PaymentIntent that's genuinely still mid-flow (e.g. a
+    // pending 3D Secure challenge) — Stripe requires continuing the exact
+    // same object for those. "requires_payment_method" means a previous
+    // confirm on this object already failed; starting a fresh PaymentIntent
+    // there instead of reusing it again avoids ever accumulating enough
+    // failed confirms on one object to trip Stripe's own anti-abuse
+    // confirmation-attempt limit, which would strand even a valid card.
+    const resumableStatuses = new Set(["requires_action", "requires_confirmation", "processing"]);
+    if (resumableStatuses.has(intent.status) && intent.client_secret) {
       return {
         orderId,
         paymentAttemptId: activeAttempt.id,
@@ -85,6 +93,19 @@ export async function createStripeRetryPaymentIntent({
         publishableKey: getStripePublishableKey(),
       };
     }
+
+    // The PaymentIntent is dead (declined, or otherwise back at
+    // requires_payment_method) but the order is still sitting at UNPAID —
+    // normally a payment_intent.payment_failed webhook flips it back to
+    // FAILED, but we can't assume that's fired yet by the time the customer
+    // hits Retry, so close it out here too. Without this, reserveExisting-
+    // OrderForRetry below (which only accepts FAILED/EXPIRED) rejects every
+    // retry attempt forever with "no longer eligible for payment retry".
+    await closePaymentAttempt({
+      paymentAttemptId: activeAttempt.id,
+      status: "FAILED",
+      failureCode: intent.last_payment_error?.code ?? "requires_new_payment_method",
+    });
   }
 
   const reservedOrder = await reserveExistingOrderForRetry(userId, orderId);
@@ -315,13 +336,23 @@ async function createCheckoutSessionForReservedOrder({
 }
 
 export async function placeCashOnDeliveryOrder(userId: number, orderId: string) {
+  // Covers both a fresh COD checkout (order/attempt still UNPAID) and
+  // switching to COD from the retry flow — where the order can be sitting
+  // at FAILED, REQUIRES_ACTION, or EXPIRED because it was never (or not
+  // yet) reserved for another card attempt. Any of those is fine to convert
+  // straight to COD; only a PAID or already-CANCELED attempt is off limits.
   const attempt = await prisma.paymentAttempt.findFirst({
     where: {
       orderId,
-      order: { userId, status: "PENDING", paymentStatus: "UNPAID" },
-      status: "UNPAID",
+      order: {
+        userId,
+        status: "PENDING",
+        paymentStatus: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION", "EXPIRED"] },
+      },
+      status: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION"] },
       stockReleasedAt: null,
     },
+    orderBy: { createdAt: "desc" },
     include: { order: true },
   });
 
@@ -451,39 +482,6 @@ export async function getCheckoutForDisplay(userId: number, sessionId: string) {
   };
 }
 
-/** Resume view for a retried card payment: same PaymentIntent-based
- * mechanism as a fresh checkout, looked up by PaymentAttempt id rather than
- * a Stripe Checkout Session id. */
-export async function getRetryPaymentForDisplay(userId: number, paymentAttemptId: string) {
-  const attempt = await prisma.paymentAttempt.findFirst({
-    where: {
-      id: paymentAttemptId,
-      order: { userId },
-    },
-    include: { order: true },
-  });
-
-  if (
-    !attempt ||
-    !attempt.stripePaymentIntentId ||
-    ["PAID", "EXPIRED", "CANCELED"].includes(attempt.status)
-  ) {
-    return null;
-  }
-
-  const intent = await getStripe().paymentIntents.retrieve(attempt.stripePaymentIntentId);
-
-  if (!intent.client_secret || ["succeeded", "canceled"].includes(intent.status)) {
-    return null;
-  }
-
-  return {
-    clientSecret: intent.client_secret,
-    publishableKey: getStripePublishableKey(),
-    orderId: attempt.order.id,
-    orderNumber: attempt.order.orderNumber,
-  };
-}
 
 type ClosePaymentAttemptParams = {
   paymentAttemptId: string;

@@ -657,7 +657,17 @@ export const createReservedOrder = createOrder;
 
 export async function getOrderCheckoutForDisplay(userId: number, orderId: string) {
   const order = await prisma.order.findFirst({
-    where: { id: orderId, userId, status: "PENDING", paymentStatus: "UNPAID" },
+    where: {
+      id: orderId,
+      userId,
+      status: "PENDING",
+      // A freshly-failed order sits at FAILED (or REQUIRES_ACTION mid-3DS,
+      // or EXPIRED) until a retry actually reserves it and flips it to
+      // UNPAID — this page has to render for all of those, not just the
+      // already-reserved UNPAID case, or the very first "Retry payment"
+      // click on a failed order 404s instead of showing the payment form.
+      paymentStatus: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION", "EXPIRED"] },
+    },
     include: {
       user: { select: { fullName: true, email: true, mobile: true } },
       items: { orderBy: { createdAt: "asc" } },

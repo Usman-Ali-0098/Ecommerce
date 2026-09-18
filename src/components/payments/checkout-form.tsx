@@ -378,7 +378,14 @@ export default function CheckoutForm({
   const router = useRouter();
   const activeOrderId = orderId ?? checkoutId ?? "";
   const [shipping, setShipping] = useState(initialShipping);
-  const [step, setStep] = useState<"delivery" | "payment">("delivery");
+  // A resumed/retried order (orderId given, no cartItemIds — the only two
+  // real callers are the fresh-checkout page, which always has
+  // cartItemIds, and the retry page, which never does) already has its
+  // shipping details saved, so it goes straight to choosing a payment
+  // method instead of re-asking for delivery info.
+  const [step, setStep] = useState<"delivery" | "payment">(
+    cartItemIds ? "delivery" : "payment",
+  );
   const [choice, setChoice] = useState<"card" | "cod" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -429,12 +436,15 @@ export default function CheckoutForm({
     setFailure({ orderId: failedOrderId, message });
   }
 
-  async function retryPayment() {
-    if (!failure) return;
+  // Shared by two triggers: retrying after an in-page failure, and a
+  // resumed order's first "Card" click (no failure to retry from yet,
+  // there's just no payment session started until the customer asks for
+  // one — see the "card" Choice's onClick below).
+  async function beginCardPayment(targetOrderId: string) {
     setRetryBusy(true);
     setRetryError(null);
     try {
-      const response = await fetch(`/api/orders/${encodeURIComponent(failure.orderId)}/retry-payment`, {
+      const response = await fetch(`/api/orders/${encodeURIComponent(targetOrderId)}/retry-payment`, {
         method: "POST",
       });
       const body = (await response.json()) as {
@@ -444,17 +454,26 @@ export default function CheckoutForm({
       };
 
       if (!response.ok || !body.success || !body.data?.clientSecret) {
-        setRetryError(body.message ?? "Unable to retry payment.");
-        return;
+        setRetryError(body.message ?? "Unable to start payment.");
+        return false;
       }
 
-      setRetrySession({ clientSecret: body.data.clientSecret, orderId: failure.orderId });
-      setFailure(null);
+      setRetrySession({ clientSecret: body.data.clientSecret, orderId: targetOrderId });
+      return true;
     } catch (error) {
-      console.error("Retry payment request error:", error);
-      setRetryError("Unable to retry payment. Please try again.");
+      console.error("Start card payment request error:", error);
+      setRetryError("Unable to start payment. Please try again.");
+      return false;
     } finally {
       setRetryBusy(false);
+    }
+  }
+
+  async function retryPayment() {
+    if (!failure) return;
+    const started = await beginCardPayment(failure.orderId);
+    if (started) {
+      setFailure(null);
     }
   }
 
@@ -622,6 +641,15 @@ export default function CheckoutForm({
                 onClick={() => {
                   setChoice("card");
                   setError(null);
+
+                  // Fresh checkout already has cartItemIds and creates its
+                  // PaymentIntent on "Pay now" via CardPaymentForm itself.
+                  // A resumed order has neither cartItemIds nor a session
+                  // yet — nothing creates one until the customer actually
+                  // picks Card, which is here.
+                  if (!cartItemIds && activeOrderId && !retrySession && !retryBusy) {
+                    void beginCardPayment(activeOrderId);
+                  }
                 }}
               />
             </div>
@@ -641,6 +669,18 @@ export default function CheckoutForm({
                   ? "Placing order..."
                   : `Place cash on delivery order${total ? ` (Rs. ${Math.round(total).toLocaleString("en-PK")})` : ""}`}
               </button>
+            )}
+            {choice === "card" && !cartItemIds && !retrySession && (
+              <div className="mt-4">
+                {retryBusy ? (
+                  <div className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 py-6 text-xs text-gray-500">
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-[#087ff5]" />
+                    Preparing secure payment...
+                  </div>
+                ) : retryError ? (
+                  <Alert message={retryError} variant="error" />
+                ) : null}
+              </div>
             )}
             {choice === "card" && stripePromise && (cartItemIds || retrySession) && (
               <Elements stripe={stripePromise}>
@@ -669,7 +709,19 @@ export default function CheckoutForm({
         onRetry={retryPayment}
         retryBusy={retryBusy}
         retryError={retryError}
-        onClose={() => setFailure(null)}
+        onClose={() => {
+          // Just clearing local state would strand the customer on this
+          // page — which, for a fresh cart checkout, still holds the
+          // now-already-consumed cartItemIds. Any further COD/Card attempt
+          // from here re-submits those stale ids and fails with "One or
+          // more selected cart items are invalid." Routing to the order's
+          // own retry page instead is a no-op when we're already there
+          // (resumed order), and the fix when we're not.
+          if (failure) {
+            router.push(`/checkout/${encodeURIComponent(failure.orderId)}`);
+          }
+          setFailure(null);
+        }}
       />
     </>
   );
@@ -824,92 +876,3 @@ function Input({
   );
 }
 
-function ExistingIntentCardForm({
-  clientSecret,
-  onError,
-}: {
-  clientSecret: string;
-  onError: (message: string) => void;
-}) {
-  const router = useRouter();
-  const stripe = useStripe();
-  const elements = useElements();
-  const savedMethods = useSavedPaymentMethods();
-  const [explicitSelection, setExplicitSelection] = useState<string | null>(null);
-  const selection =
-    explicitSelection ??
-    (savedMethods.length > 0 ? (savedMethods.find((method) => method.isDefault) ?? savedMethods[0]).id : "new");
-  const [saveCard, setSaveCard] = useState(true);
-  const [paying, setPaying] = useState(false);
-
-  async function pay(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!stripe || !elements) return;
-
-    try {
-      setPaying(true);
-      onError("");
-
-      const confirmation =
-        selection === "new"
-          ? await stripe.confirmCardPayment(clientSecret, {
-              payment_method: {
-                card: elements.getElement(CardNumberElement)!,
-              },
-              setup_future_usage: saveCard ? "off_session" : undefined,
-            })
-          : await stripe.confirmCardPayment(clientSecret, {
-              payment_method: selection,
-            });
-
-      if (confirmation.error) {
-        onError(confirmation.error.message ?? "Payment could not be completed.");
-        return;
-      }
-
-      router.push("/payment/complete");
-    } catch {
-      onError("Payment could not be completed. Please try again.");
-    } finally {
-      setPaying(false);
-    }
-  }
-
-  return (
-    <form onSubmit={pay} className="mt-4 space-y-4">
-      <CardEntryFields
-        savedMethods={savedMethods}
-        selection={selection}
-        onSelectionChange={setExplicitSelection}
-        saveCard={saveCard}
-        onSaveCardChange={setSaveCard}
-      />
-      <button
-        type="submit"
-        disabled={!stripe || !elements || paying}
-        className="h-11 w-full rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:bg-gray-300"
-      >
-        {paying ? "Processing payment..." : "Pay now"}
-      </button>
-    </form>
-  );
-}
-
-export function CardPayment({
-  data,
-  onError,
-}: {
-  data: { clientSecret: string; publishableKey: string };
-  onError: (message: string) => void;
-}) {
-  const stripePromise = useMemo(
-    () => loadStripe(data.publishableKey),
-    [data.publishableKey],
-  );
-
-  return (
-    <Elements stripe={stripePromise}>
-      <ExistingIntentCardForm clientSecret={data.clientSecret} onError={onError} />
-    </Elements>
-  );
-}
