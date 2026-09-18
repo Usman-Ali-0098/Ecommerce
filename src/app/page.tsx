@@ -93,10 +93,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </h2>
 
             <div className="w-full min-w-0 lg:ml-auto lg:w-auto">
-              <ProductFilters
-                key={`filters:${productsKey}`}
-                categories={categories}
-              />
+              {/* No key here on purpose: this component already re-reads
+                  category/search/sort from useSearchParams() on every
+                  render, and its own `search` state is what the debounced
+                  effect is mid-typing into — remounting it on every
+                  navigation (like the grid below intentionally does) would
+                  destroy that input and drop focus after every search. */}
+              <ProductFilters categories={categories} />
             </div>
           </div>
 

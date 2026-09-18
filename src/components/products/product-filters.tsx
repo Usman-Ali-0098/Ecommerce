@@ -4,6 +4,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { useEffect, useState } from "react";
 
+import FilterDropdown from "@/components/products/filter-dropdown";
+
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "price-low", label: "Price: Low to High" },
+  { value: "price-high", label: "Price: High to Low" },
+];
+
 type Category = {
   id: string;
   name: string;
@@ -83,21 +92,21 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
     <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
       {/* Category */}
 
-      <select
+      <FilterDropdown
         value={currentCategory}
-        onChange={(event) =>
-          updateParams("category", event.target.value || undefined)
-        }
-        className="h-9 w-full min-w-0 rounded-md border border-[#d8dee8] bg-white px-3 text-xs text-gray-600 outline-none transition focus:border-[#087ff5]"
-      >
-        <option value="">All Categories</option>
-
-        {categories.map((category) => (
-          <option key={category.id} value={category.slug}>
-            {category.name}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => updateParams("category", value || undefined)}
+        placeholder="All Categories"
+        searchable
+        searchPlaceholder="Search categories..."
+        className="w-full lg:w-52"
+        options={[
+          { value: "", label: "All Categories" },
+          ...categories.map((category) => ({
+            value: category.slug,
+            label: category.name,
+          })),
+        ]}
+      />
 
       {/* Search */}
 
@@ -124,23 +133,14 @@ export default function ProductFilters({ categories }: ProductFiltersProps) {
 
       {/* Sort */}
 
-      <select
+      <FilterDropdown
         value={currentSort}
-        onChange={(event) => {
-          const value = event.target.value;
-
-          updateParams("sort", value === "newest" ? undefined : value);
-        }}
-        className="h-9 w-full rounded-md border border-[#d8dee8] bg-white px-3 text-xs text-gray-600 outline-none transition focus:border-[#087ff5]"
-      >
-        <option value="newest">Newest</option>
-
-        <option value="oldest">Oldest</option>
-
-        <option value="price-low">Price: Low to High</option>
-
-        <option value="price-high">Price: High to Low</option>
-      </select>
+        onChange={(value) =>
+          updateParams("sort", value === "newest" ? undefined : value)
+        }
+        className="w-full lg:w-48"
+        options={SORT_OPTIONS}
+      />
     </div>
   );
 }
