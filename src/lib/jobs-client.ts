@@ -109,3 +109,30 @@ export async function sendProductImportJob({
 
   return response.json();
 }
+
+/** Rebuilds the chatbot's RAG knowledge index (every active Product and
+ * Category, plus the hardcoded policy/FAQ entries in the jobs service) — one
+ * JobRunItem + one Celery task per source, run in parallel across workers.
+ * Safe to call repeatedly: each write is an upsert. Poll
+ * prisma.jobRun.findUnique({ where: { id: jobId }, include: { items: true } })
+ * for progress. */
+export async function sendKnowledgeReindexJob({
+  requestedBy,
+}: {
+  requestedBy?: number;
+} = {}): Promise<{ jobId: string; sourceCount: number }> {
+  const response = await fetch(jobsServiceUrl("/jobs/knowledge/reindex"), {
+    method: "POST",
+    headers: jobsServiceHeaders(),
+    body: JSON.stringify({ requested_by: requestedBy }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new JobsServiceError(
+      body?.detail ?? `Jobs service returned ${response.status} for /jobs/knowledge/reindex.`,
+    );
+  }
+
+  return response.json();
+}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import AuthProvider from "@/components/auth-provider";
+import ChatWidget from "@/components/chat/chat-widget";
 
 import "./globals.css";
 
@@ -31,7 +32,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-white text-gray-900">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <ChatWidget />
+        </AuthProvider>
       </body>
     </html>
   );

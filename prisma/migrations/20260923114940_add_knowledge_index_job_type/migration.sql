@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "JobType" ADD VALUE 'KNOWLEDGE_INDEX';

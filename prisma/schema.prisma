@@ -18,6 +18,7 @@ model User {
   updatedAt           DateTime             @updatedAt
   accounts            Account[]
   cart                Cart?
+  chatSessions        ChatSession[]
   notifications       Notification[]
   orders              Order[]
   passwordResetTokens PasswordResetToken[]
@@ -334,6 +335,7 @@ model JobRunItem {
 enum JobType {
   EMAIL
   PRODUCT_IMPORT
+  KNOWLEDGE_INDEX
 }
 
 enum JobStatus {
@@ -392,4 +394,69 @@ enum NotificationType {
 enum AdminNotificationType {
   NEW_ORDER
   ORDER_CANCELLED
+}
+
+// --- Chatbot: RAG knowledge index ---------------------------------------
+
+model KnowledgeChunk {
+  id         String              @id @default(cuid())
+  sourceType KnowledgeSourceType
+  sourceId   String
+  content    String
+  metadata   Json                @default("{}")
+  visibility KnowledgeVisibility @default(PUBLIC)
+  embedding  Unsupported("vector(768)")?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([sourceType, sourceId])
+  @@index([visibility])
+}
+
+enum KnowledgeSourceType {
+  PRODUCT
+  CATEGORY
+  POLICY
+  FAQ
+}
+
+enum KnowledgeVisibility {
+  PUBLIC
+  INTERNAL
+}
+
+// --- Chatbot: conversation memory -----------------------------------------
+
+model ChatSession {
+  id           String        @id @default(cuid())
+  userId       Int?
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestToken   String?       @unique
+  title        String?
+  summary      String?
+  messages     ChatMessage[]
+  createdAt    DateTime      @default(now())
+  lastActiveAt DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([userId, lastActiveAt])
+}
+
+model ChatMessage {
+  id        String          @id @default(cuid())
+  sessionId String
+  session   ChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      ChatMessageRole
+  content   String
+  toolCalls Json?
+  createdAt DateTime        @default(now())
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  TOOL
 }
