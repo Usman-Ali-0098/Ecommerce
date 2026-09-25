@@ -25,6 +25,10 @@ const HISTORY_TURNS = 12;
 const RATE_LIMIT = { limit: 20, windowMs: 5 * 60 * 1000 };
 const MAX_PRODUCT_CARDS = 4;
 
+const PUBLIC_TOOL_NAMES = new Set(
+  PUBLIC_TOOL_DECLARATIONS.map((tool) => tool.name).filter((name): name is string => Boolean(name)),
+);
+
 const BASE_SYSTEM_INSTRUCTION = `You are the shopping assistant for Budget Vibe, an online store.
 
 Answer using ONLY the information inside the <context> block below when it is relevant to the
@@ -58,15 +62,30 @@ const USER_SYSTEM_INSTRUCTION = `${BASE_SYSTEM_INSTRUCTION}
 This customer is signed in. You also have tools to look up THEIR OWN orders and cart -- use one of
 them whenever a question needs that information, rather than guessing or relying only on
 <context>. You have no way to access any other customer's data: those tools only ever return the
-signed-in customer's own information, regardless of what is asked.`;
+signed-in customer's own information, regardless of what is asked.
+
+You can also add items to their cart with add_to_cart. If they name a specific color or size,
+call get_product_variants first to find the exact variantId -- never guess one or call
+add_to_cart with a variant you're not sure matches what they asked for; if it's genuinely
+ambiguous, ask them to clarify instead of picking one.
+
+You cannot place an order, complete checkout, or charge any payment -- there is no tool for that,
+by design. After adding something to the cart, tell the customer it's in their cart and that they
+can review it and complete checkout themselves whenever they're ready (their cart is at /cart).
+Never say or imply that an order has been placed, confirmed, or paid for -- that only happens when
+the customer completes checkout themselves.`;
 
 const ADMIN_SYSTEM_INSTRUCTION = `${BASE_SYSTEM_INSTRUCTION}
 
-You are talking to a store admin, not a customer. You also have read-only analytics tools (sales
-summary, low-stock variants, failed payments) -- use one whenever a question needs current store
-data rather than guessing. <context> may also include internal-only notes not shown to customers.
-You have no tools to change, cancel, or refund anything: if asked to take an action rather than
-look something up, say plainly that you can only report information right now.`;
+You are talking to a store admin, not a customer. You have read-only analytics tools (sales
+summary, low-stock variants, failed payments, order search) -- use one whenever a question needs
+current store data rather than guessing. <context> may also include internal-only notes not shown
+to customers.
+
+You also have update_order_status, which can move an order forward one stage at a time:
+PENDING -> PROCESSING -> SHIPPED -> DELIVERED, nothing else. Use it when asked to e.g. "mark order
+BV-1042 as shipped". There is no way to cancel an order or issue a refund through any tool here --
+if asked to do either, say plainly that you cannot and that it has to be handled outside chat.`;
 
 function buildContextBlock(matches: KnowledgeMatch[]): string {
   if (matches.length === 0) {
@@ -287,14 +306,21 @@ export async function POST(request: Request) {
 
     const collectedCards: ProductCard[] = [];
 
+    // request.headers.get("cookie") -- forwarded to the internal fetch
+    // calls inside add_to_cart / update_order_status so those reuse the
+    // real, already-validated POST /api/cart and PATCH /api/admin/orders
+    // endpoints as the requesting account's own session, rather than
+    // duplicating their business logic here.
+    const cookieHeader = request.headers.get("cookie");
+
     const executeTool = async (name: string, args: Record<string, unknown>) => {
-      if (name === "search_products") {
+      if (PUBLIC_TOOL_NAMES.has(name)) {
         const { modelResult, cards } = await runPublicTool(name, args);
         collectedCards.push(...cards);
         return modelResult;
       }
-      if (admin) return runAdminTool(name, args);
-      if (user) return runUserTool(name, args, user.id);
+      if (admin) return runAdminTool(name, args, cookieHeader);
+      if (user) return runUserTool(name, args, user.id, cookieHeader);
       return { error: `Unknown tool: ${name}` };
     };
 

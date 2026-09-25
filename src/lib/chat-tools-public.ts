@@ -45,6 +45,19 @@ export const PUBLIC_TOOL_DECLARATIONS: FunctionDeclaration[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "get_product_variants",
+    description:
+      "Looks up the exact purchasable variants (color, size, stock, and the variantId needed to add to cart) for one specific product, by its slug -- slugs come from search_products or from <context>'s product entries. Always call this before add_to_cart if you don't already know the exact variantId for what the customer wants (e.g. they said 'the black one in medium' but you only have the product, not which variant that maps to).",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string", description: "The product's slug." },
+      },
+      required: ["slug"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function clampInt(value: unknown, fallback: number, max: number, min = 1): number {
@@ -131,6 +144,50 @@ export async function runPublicTool(
           })),
         },
         cards,
+      };
+    }
+
+    case "get_product_variants": {
+      const slug = typeof args.slug === "string" ? args.slug.trim() : "";
+      if (!slug) {
+        return { modelResult: { error: "slug is required." }, cards: [] };
+      }
+
+      const product = await prisma.product.findFirst({
+        where: { slug, isActive: true },
+        select: {
+          name: true,
+          variants: {
+            where: { isActive: true },
+            select: {
+              id: true,
+              sku: true,
+              price: true,
+              stock: true,
+              color: { select: { name: true } },
+              size: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      if (!product) {
+        return { modelResult: { error: `No active product found with slug "${slug}".` }, cards: [] };
+      }
+
+      return {
+        modelResult: {
+          productName: product.name,
+          variants: product.variants.map((variant) => ({
+            variantId: variant.id,
+            color: variant.color?.name ?? null,
+            size: variant.size?.name ?? null,
+            price: Number(variant.price),
+            inStock: variant.stock > 0,
+            stock: variant.stock,
+          })),
+        },
+        cards: [],
       };
     }
 

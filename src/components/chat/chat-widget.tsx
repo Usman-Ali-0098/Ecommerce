@@ -93,12 +93,16 @@ function formatRelativeTime(iso: string): string {
 
 const TOOL_LABELS: Record<string, string> = {
   search_products: "the product catalog",
+  get_product_variants: "available options",
   get_my_orders: "your recent orders",
   get_order_status: "that order",
   get_my_cart: "your cart",
+  add_to_cart: "your cart",
   get_sales_summary: "sales data",
   get_low_stock: "stock levels",
   get_failed_payments: "payment attempts",
+  search_orders: "orders",
+  update_order_status: "that order",
 };
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -126,12 +130,28 @@ const ADMIN_SUGGESTIONS = [
   "Any failed payments recently?",
 ];
 
+// Action tools did something, rather than just looking something up --
+// "Checked your cart" would misdescribe add_to_cart, which changed it.
+const ACTION_TOOL_PHRASES: Record<string, string> = {
+  add_to_cart: "Added to your cart",
+  update_order_status: "Updated that order",
+};
+
 function summarizeToolsUsed(toolsUsed: string[] | undefined): string | null {
   if (!toolsUsed || toolsUsed.length === 0) return null;
 
-  const labels = [...new Set(toolsUsed.map((name) => TOOL_LABELS[name] ?? name))];
+  const uniqueTools = [...new Set(toolsUsed)];
+  const actionPhrases = [
+    ...new Set(uniqueTools.filter((name) => ACTION_TOOL_PHRASES[name]).map((name) => ACTION_TOOL_PHRASES[name])),
+  ];
+  const readLabels = [
+    ...new Set(uniqueTools.filter((name) => !ACTION_TOOL_PHRASES[name]).map((name) => TOOL_LABELS[name] ?? name)),
+  ];
 
-  return `Checked ${labels.join(" and ")}`;
+  const parts = [...actionPhrases];
+  if (readLabels.length > 0) parts.push(`Checked ${readLabels.join(" and ")}`);
+
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function pluralize(word: string, count: number): string {

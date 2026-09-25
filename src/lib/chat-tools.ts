@@ -50,12 +50,33 @@ export const USER_TOOL_DECLARATIONS: FunctionDeclaration[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "add_to_cart",
+    description:
+      "Adds one product variant to the signed-in customer's cart. You must already have the exact variantId -- call get_product_variants first if you don't (e.g. the customer named a color/size but you've only seen the product, not its variants). This only adds to cart; it never places an order or charges anything -- after adding, tell the customer their item is in the cart and they can review and check out whenever they're ready.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        variantId: { type: "string", description: "The exact variant id from get_product_variants." },
+        quantity: { type: "integer", description: "How many to add. Default 1." },
+      },
+      required: ["variantId"],
+      additionalProperties: false,
+    },
+  },
 ];
+
+function clampQuantity(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(Math.floor(n), 20);
+}
 
 export async function runUserTool(
   name: string,
   args: Record<string, unknown>,
   userId: number,
+  cookieHeader: string | null,
 ): Promise<Record<string, unknown>> {
   switch (name) {
     case "get_my_orders": {
@@ -128,6 +149,43 @@ export async function runUserTool(
           unitPrice: item.variant.price,
           lineTotal: item.lineTotal,
         })),
+      };
+    }
+
+    case "add_to_cart": {
+      const variantId = typeof args.variantId === "string" ? args.variantId.trim() : "";
+      const quantity = clampQuantity(args.quantity);
+
+      if (!variantId) {
+        return { error: "variantId is required." };
+      }
+
+      // Deliberately reuses the real POST /api/cart endpoint rather than
+      // reimplementing its stock/availability checks and cart/cartItem
+      // upsert logic here -- that logic is already correct and tested; a
+      // second, chat-only copy of it would just be a second place for the
+      // two to quietly drift apart. Runs as the signed-in customer's own
+      // session (their cookie is forwarded), so it can only ever act on
+      // their own cart -- same guarantee as every other tool here.
+      const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
+      const response = await fetch(`${baseUrl}/api/cart`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        body: JSON.stringify({ variantId, quantity }),
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.success) {
+        return { error: result?.message ?? "Unable to add that item to the cart." };
+      }
+
+      return {
+        added: true,
+        quantity: result.data.cartItem.quantity,
+        remainingStock: result.data.stock,
       };
     }
 
