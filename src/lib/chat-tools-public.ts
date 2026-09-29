@@ -26,10 +26,14 @@ export const PUBLIC_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: "search_products",
     description:
-      "Searches the live product catalog with real price filters and sorting. Use this for ANY question involving price ranking, comparison, or counting -- 'most expensive', 'cheapest', 'highest/lowest price', 'how many products under X', 'anything in stock under Rs 5000' -- instead of answering from memory or from <context>. This queries the actual current catalog, not a retrieved sample, so it is the only reliable source for these questions.",
+      "Searches the live product catalog with real price filters and sorting. Use this for ANY question involving price ranking, comparison, or counting -- 'most expensive', 'cheapest', 'highest/lowest price', 'how many products under X', 'anything in stock under Rs 5000' -- instead of answering from memory or from <context>. This queries the actual current catalog, not a retrieved sample, so it is the only reliable source for these questions. When the customer names a SPECIFIC product (e.g. 'do you have a smart watch'), always pass `keyword` so results are precise -- omitting it returns a broader category/price listing, which is only right for genuine browsing questions like 'what's in your Tech category'.",
     parametersJsonSchema: {
       type: "object",
       properties: {
+        keyword: {
+          type: "string",
+          description: "Match against the product name, e.g. 'watch' or 'smart watch'. Use whenever a specific product was named.",
+        },
         sortBy: {
           type: "string",
           enum: ["price_asc", "price_desc", "newest"],
@@ -78,6 +82,7 @@ export async function runPublicTool(
     case "search_products": {
       const limit = clampInt(args.limit, 5, 10);
       const sortBy = args.sortBy === "price_asc" || args.sortBy === "price_desc" ? args.sortBy : "newest";
+      const keyword = typeof args.keyword === "string" ? args.keyword.trim() : undefined;
       const category = typeof args.category === "string" ? args.category.trim() : undefined;
       const minPrice = typeof args.minPrice === "number" ? args.minPrice : undefined;
       const maxPrice = typeof args.maxPrice === "number" ? args.maxPrice : undefined;
@@ -91,6 +96,7 @@ export async function runPublicTool(
           ...(maxPrice !== undefined ? { price: { lte: maxPrice } } : {}),
           product: {
             isActive: true,
+            ...(keyword ? { name: { contains: keyword, mode: "insensitive" } } : {}),
             category: {
               isActive: true,
               ...(category ? { name: { equals: category, mode: "insensitive" } } : {}),
@@ -153,47 +159,66 @@ export async function runPublicTool(
         return { modelResult: { error: "slug is required." }, cards: [] };
       }
 
-      const product = await prisma.product.findFirst({
-        where: { slug, isActive: true },
-        select: {
-          name: true,
-          variants: {
-            where: { isActive: true },
-            select: {
-              id: true,
-              sku: true,
-              price: true,
-              stock: true,
-              color: { select: { name: true } },
-              size: { select: { name: true } },
-            },
-          },
-        },
-      });
-
-      if (!product) {
+      const result = await getProductVariantsBySlug(slug);
+      if (!result) {
         return { modelResult: { error: `No active product found with slug "${slug}".` }, cards: [] };
       }
 
-      return {
-        modelResult: {
-          productName: product.name,
-          variants: product.variants.map((variant) => ({
-            variantId: variant.id,
-            color: variant.color?.name ?? null,
-            size: variant.size?.name ?? null,
-            price: Number(variant.price),
-            inStock: variant.stock > 0,
-            stock: variant.stock,
-          })),
-        },
-        cards: [],
-      };
+      return { modelResult: result, cards: [] };
     }
 
     default:
       return { modelResult: { error: `Unknown tool: ${name}` }, cards: [] };
   }
+}
+
+export type ProductVariantOption = {
+  variantId: string;
+  color: string | null;
+  size: string | null;
+  price: number;
+  inStock: boolean;
+  stock: number;
+};
+
+/** Shared by the get_product_variants tool (conversational path) and
+ * GET /api/products/[slug]/variants (the click-driven path used when a
+ * customer clicks "Add to Cart" on a product card instead of typing) --
+ * one query, two callers, so they can never drift apart on what counts as
+ * a purchasable variant. */
+export async function getProductVariantsBySlug(
+  slug: string,
+): Promise<{ productName: string; variants: ProductVariantOption[] } | null> {
+  const product = await prisma.product.findFirst({
+    where: { slug, isActive: true },
+    select: {
+      name: true,
+      variants: {
+        where: { isActive: true },
+        select: {
+          id: true,
+          price: true,
+          stock: true,
+          color: { select: { name: true } },
+          size: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  if (!product) return null;
+
+  return {
+    productName: product.name,
+    variants: product.variants.map((variant) => ({
+      variantId: variant.id,
+      color: variant.color?.name ?? null,
+      size: variant.size?.name ?? null,
+      price: Number(variant.price),
+      inStock: variant.stock > 0,
+      stock: variant.stock,
+    })),
+  };
 }
 
 /** Fallback card lookup for plain descriptive product questions that never

@@ -394,6 +394,7 @@ enum NotificationType {
 enum AdminNotificationType {
   NEW_ORDER
   ORDER_CANCELLED
+  KNOWLEDGE_REINDEX
 }
 
 // --- Chatbot: RAG knowledge index ---------------------------------------

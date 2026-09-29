@@ -30,6 +30,7 @@ export class OrderServiceError extends Error {
 
 type GetUserOrdersParams = {
   userId: number;
+  status?: string;
   page?: number;
   pageSize?: number;
 };
@@ -82,6 +83,7 @@ export const PAYMENT_RETRY_LIFETIME_MS = 10 * 60 * 1000;
 
 export async function getUserOrders({
   userId,
+  status = "",
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
 }: GetUserOrdersParams) {
@@ -91,11 +93,24 @@ export async function getUserOrders({
 
   const skip = (safePage - 1) * safePageSize;
 
+  const where = {
+    userId,
+
+    ...(status
+      ? {
+          status: status as
+            | "PENDING"
+            | "PROCESSING"
+            | "SHIPPED"
+            | "DELIVERED"
+            | "CANCELLED",
+        }
+      : {}),
+  };
+
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
-      where: {
-        userId,
-      },
+      where,
 
       orderBy: {
         createdAt: "desc",
@@ -115,9 +130,7 @@ export async function getUserOrders({
     }),
 
     prisma.order.count({
-      where: {
-        userId,
-      },
+      where,
     }),
   ]);
 

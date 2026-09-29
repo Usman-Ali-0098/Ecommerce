@@ -26,13 +26,47 @@ type Shipping = {
   shippingCountry: string;
 };
 
+export type OrderConfirmedResult = {
+  orderId: string;
+  orderNumber: string;
+  paymentMethod: "CARD" | "CASH_ON_DELIVERY";
+  amount?: number;
+};
+
+export type OrderFailedResult = {
+  orderId: string;
+  orderNumber: string | null;
+  message: string;
+};
+
 type Props = {
   cartItemIds?: string[];
   total?: number;
   publishableKey?: string;
   orderId?: string;
   checkoutId?: string;
+  // The order's human-facing number, for a resumed order (orderId given,
+  // no cartItemIds) -- onOrderPlaced only fires for a fresh order, so a
+  // resume has nothing else to seed the local orderNumber state from.
+  // Unused by the real /checkout/[sessionId] retry page (it never shows
+  // this inline, only after a router.push away), only by the embedded
+  // chat flow which does.
+  orderNumber?: string;
   shipping: Shipping;
+  // Given only by embedded callers (the chat widget) that render this form
+  // outside the real /checkout page's own routed tree -- see its call site
+  // for why a route change there doesn't behave the way it does here. When
+  // omitted, behavior is exactly what it always was: navigate to the real
+  // confirmation page.
+  onOrderConfirmed?: (result: OrderConfirmedResult) => void;
+  // Same reasoning as onOrderConfirmed, but for a failed card payment:
+  // PaymentFailedModal is a `fixed inset-0` dialog meant to cover the real
+  // page. Nested inside the widget's own animated (transformed) panel, a
+  // `fixed` element's containing block becomes that panel instead of the
+  // viewport -- it renders trapped and tiny rather than full-screen. When
+  // this is given, that modal is skipped entirely and the failure is
+  // handed back for the widget to show its own way instead.
+  onOrderFailed?: (failure: OrderFailedResult) => void;
 };
 
 type SavedPaymentMethod = {
@@ -227,22 +261,30 @@ function CardEntryFields({
   );
 }
 
-type PlacedOrder = { orderId: string; paymentAttemptId?: string };
+type PlacedOrder = { orderId: string; orderNumber?: string; paymentAttemptId?: string };
 
 function CardPaymentForm({
   shipping,
   cartItemIds,
   total,
   resume,
+  resumeOrderNumber,
   onOrderPlaced,
   onFailure,
+  onOrderConfirmed,
 }: {
   shipping: Shipping;
   cartItemIds?: string[];
   total?: number;
   resume?: { clientSecret: string; orderId: string };
+  // Only meaningful alongside resume -- CardPaymentForm's own placedOrder
+  // never learns an order number for a resumed session (the fetch that
+  // sets it is skipped whenever clientSecret already exists), so the
+  // caller has to hand over the one it already knows.
+  resumeOrderNumber?: string;
   onOrderPlaced: (orderId: string, orderNumber: string) => void;
   onFailure: (orderId: string, message: string) => void;
+  onOrderConfirmed?: (result: OrderConfirmedResult) => void;
 }) {
   const router = useRouter();
   const stripe = useStripe();
@@ -266,7 +308,9 @@ function CardPaymentForm({
     // already has one). Any failure from this point on must go through
     // onFailure instead of a local error — re-submitting this form would
     // otherwise try to re-place the order against an already-emptied cart.
-    let placedOrder: PlacedOrder | null = resume ? { orderId: resume.orderId } : null;
+    let placedOrder: PlacedOrder | null = resume
+      ? { orderId: resume.orderId, orderNumber: resumeOrderNumber }
+      : null;
     let clientSecret = resume?.clientSecret ?? null;
 
     try {
@@ -298,7 +342,11 @@ function CardPaymentForm({
           return;
         }
 
-        placedOrder = { orderId: body.data.orderId, paymentAttemptId: body.data.paymentAttemptId };
+        placedOrder = {
+          orderId: body.data.orderId,
+          orderNumber: body.data.orderNumber,
+          paymentAttemptId: body.data.paymentAttemptId,
+        };
         clientSecret = body.data.clientSecret;
         onOrderPlaced(body.data.orderId, body.data.orderNumber);
       }
@@ -326,9 +374,32 @@ function CardPaymentForm({
       }
 
       if (placedOrder) {
-        const query = new URLSearchParams({ order_id: placedOrder.orderId });
-        if (placedOrder.paymentAttemptId) query.set("session_id", placedOrder.paymentAttemptId);
-        router.push(`/payment/complete?${query.toString()}`);
+        if (onOrderConfirmed) {
+          // The embedded flow never navigates to /payment/complete, which
+          // is what normally triggers the server to reconcile with Stripe
+          // and finalize the order (see the route's own doc comment) --
+          // call it directly so the order is genuinely marked paid, with
+          // its notifications created, before the customer sees "Order
+          // placed" in chat.
+          try {
+            await fetch(`/api/orders/${encodeURIComponent(placedOrder.orderId)}/payment-result`);
+          } catch (reconcileError) {
+            console.error("Payment reconciliation error:", reconcileError);
+            // Stripe already confirmed the charge client-side -- don't
+            // block the confirmation on this; the webhook is still a
+            // backup path that will finalize it shortly regardless.
+          }
+          onOrderConfirmed({
+            orderId: placedOrder.orderId,
+            orderNumber: placedOrder.orderNumber ?? "",
+            paymentMethod: "CARD",
+            amount: total,
+          });
+        } else {
+          const query = new URLSearchParams({ order_id: placedOrder.orderId });
+          if (placedOrder.paymentAttemptId) query.set("session_id", placedOrder.paymentAttemptId);
+          router.push(`/payment/complete?${query.toString()}`);
+        }
       }
     } catch (err) {
       console.error("Payment confirmation error:", err);
@@ -373,7 +444,10 @@ export default function CheckoutForm({
   publishableKey,
   orderId,
   checkoutId,
+  orderNumber: initialOrderNumber,
   shipping: initialShipping,
+  onOrderConfirmed,
+  onOrderFailed,
 }: Props) {
   const router = useRouter();
   const activeOrderId = orderId ?? checkoutId ?? "";
@@ -391,7 +465,7 @@ export default function CheckoutForm({
   const [busy, setBusy] = useState(false);
 
   // Failed-payment modal + the resumed session it hands off to, once retried.
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [orderNumber, setOrderNumber] = useState<string | null>(initialOrderNumber ?? null);
   const [failure, setFailure] = useState<{ orderId: string; message: string } | null>(null);
   const [retrySession, setRetrySession] = useState<{ clientSecret: string; orderId: string } | null>(null);
   const [retryBusy, setRetryBusy] = useState(false);
@@ -432,6 +506,10 @@ export default function CheckoutForm({
   }
 
   function handleCardFailure(failedOrderId: string, message: string) {
+    if (onOrderFailed) {
+      onOrderFailed({ orderId: failedOrderId, orderNumber, message });
+      return;
+    }
     setRetryError(null);
     setFailure({ orderId: failedOrderId, message });
   }
@@ -495,16 +573,25 @@ export default function CheckoutForm({
         const body = (await response.json()) as {
           success: boolean;
           message?: string;
-          data?: { orderId: string };
+          data?: { orderId: string; orderNumber: string };
         };
         if (!response.ok || !body.success || !body.data) {
           setError(body.message ?? "Unable to place cash on delivery order.");
           return;
         }
-        router.push(
-          `/payment/cash-on-delivery?order_id=${encodeURIComponent(body.data.orderId)}`,
-        );
-        router.refresh();
+        if (onOrderConfirmed) {
+          onOrderConfirmed({
+            orderId: body.data.orderId,
+            orderNumber: body.data.orderNumber,
+            paymentMethod: "CASH_ON_DELIVERY",
+            amount: total,
+          });
+        } else {
+          router.push(
+            `/payment/cash-on-delivery?order_id=${encodeURIComponent(body.data.orderId)}`,
+          );
+          router.refresh();
+        }
       } else if (activeOrderId) {
         // Resuming an existing order
         const response = await fetch("/api/stripe/cash-on-delivery", {
@@ -689,8 +776,10 @@ export default function CheckoutForm({
                   cartItemIds={retrySession ? undefined : cartItemIds}
                   total={total}
                   resume={retrySession ?? undefined}
+                  resumeOrderNumber={retrySession ? (orderNumber ?? undefined) : undefined}
                   onOrderPlaced={handleOrderPlaced}
                   onFailure={handleCardFailure}
+                  onOrderConfirmed={onOrderConfirmed}
                 />
               </Elements>
             )}

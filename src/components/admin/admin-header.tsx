@@ -12,6 +12,7 @@ import {
   CheckCheck,
   ChevronDown,
   LogOut,
+  Menu,
   ShoppingBag,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ import {
 
 import Image from "next/image"
 import { useNotificationUpdates } from "@/hooks/use-notification-updates";
+import { useAdminSidebar } from "@/components/admin/admin-sidebar-context";
 
 type AdminHeaderProps = {
   admin: {
@@ -143,6 +145,8 @@ export default function AdminHeader({
 }: AdminHeaderProps) {
   const router =
     useRouter();
+
+  const { toggle: toggleSidebar } = useAdminSidebar();
 
   /*
    * --------------------------------
@@ -561,6 +565,17 @@ export default function AdminHeader({
         {/* Brand */}
 
         <div className="flex items-center gap-2.5">
+          {/* Mobile / Tablet Sidebar Toggle */}
+
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Toggle navigation menu"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-50 hover:text-gray-900 lg:hidden"
+          >
+            <Menu size={18} />
+          </button>
+
            <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
     <Image
       src="/products/budget-vibe.png"

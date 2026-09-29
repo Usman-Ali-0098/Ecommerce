@@ -4,10 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   Bot,
+  Check,
   History as HistoryIcon,
   Loader2,
+  Minus,
   PackageX,
+  Plus,
   Send,
+  ShoppingCart,
   SquarePen,
   Trash2,
   X,
@@ -17,6 +21,10 @@ import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 
+import ChatCheckoutPanel from "@/components/chat/chat-checkout-panel";
+import type { OrderConfirmedResult, OrderFailedResult } from "@/components/payments/checkout-form";
+import { notifyCartUpdated } from "@/lib/cart-events";
+import { notifyNotificationUpdated } from "@/lib/notification-events";
 import { cn } from "@/lib/utils";
 
 // Gemini's replies come back markdown-formatted (**bold**, bullet lists,
@@ -59,6 +67,24 @@ type ProductCard = {
   imageUrl: string | null;
 };
 
+type ProductVariantOption = {
+  variantId: string;
+  color: string | null;
+  size: string | null;
+  price: number;
+  inStock: boolean;
+  stock: number;
+};
+
+type CartReviewItem = {
+  id: string;
+  product: string;
+  color: string | null;
+  size: string | null;
+  quantity: number;
+  lineTotal: number;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -66,7 +92,16 @@ type ChatMessage = {
   toolsUsed?: string[];
   sources?: ChatSource[];
   productCards?: ProductCard[];
+  relatedCards?: ProductCard[];
   isError?: boolean;
+  failedOrder?: {
+    orderId: string;
+    orderNumber: string | null;
+    // Set once either button is clicked -- locks the card so a double
+    // click (or clicking back after scrolling up) can't fire the action
+    // twice or queue up duplicate follow-up messages.
+    resolution?: "retry" | "later";
+  };
 };
 
 type RecentChat = {
@@ -77,6 +112,26 @@ type RecentChat = {
 
 function formatPrice(price: number): string {
   return `Rs. ${Math.round(price).toLocaleString("en-PK")}`;
+}
+
+// Matches the 10% rate already duplicated the same way in CartSummary,
+// GET /api/cart, and createOrder() -- a display-only echo of the same
+// single-line constant, not a new source of truth.
+const TAX_RATE = 0.1;
+
+function groupCardsByCategory(cards: ProductCard[]): { category: string; cards: ProductCard[] }[] {
+  const order: string[] = [];
+  const byCategory = new Map<string, ProductCard[]>();
+
+  for (const card of cards) {
+    if (!byCategory.has(card.category)) {
+      order.push(card.category);
+      byCategory.set(card.category, []);
+    }
+    byCategory.get(card.category)!.push(card);
+  }
+
+  return order.map((category) => ({ category, cards: byCategory.get(category)! }));
 }
 
 function formatRelativeTime(iso: string): string {
@@ -196,15 +251,55 @@ export default function ChatWidget() {
   // fresh thread; collapses back to a real id once the server returns one.
   const [currentSessionId, setCurrentSessionId] = useState<string | null | undefined>(undefined);
 
-  const [view, setView] = useState<"chat" | "history">("chat");
+  const [view, setView] = useState<"chat" | "history" | "checkout" | "review">("chat");
   const [recentChats, setRecentChats] = useState<RecentChat[] | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isLoadingThread, setIsLoadingThread] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
+  // Cart interactivity: clicking "Add to Cart" on a card is a real, direct
+  // /api/cart call, never an LLM tool call (see the plan for this feature)
+  // -- variantLoadingId marks which specific card is mid-fetch,
+  // variantPicker holds an open color/size chooser (only needed when a
+  // product has more than one variant), cartFeedback drives the "added!"
+  // banner with its Keep Shopping / Place Order choice.
+  const [variantLoadingId, setVariantLoadingId] = useState<string | null>(null);
+  const [variantPicker, setVariantPicker] = useState<{
+    productId: string;
+    productName: string;
+    variants: ProductVariantOption[];
+  } | null>(null);
+  const [cartFeedback, setCartFeedback] = useState<{ productName: string } | null>(null);
+  const [cartError, setCartError] = useState<string | null>(null);
+
+  // Cart items added *through this conversation* -- checkout is scoped to
+  // just these, not the customer's whole real cart (see ChatCheckoutPanel).
+  // resumeOrderId is set when retrying a previously failed card payment
+  // from this widget, switching ChatCheckoutPanel into its resume mode.
+  const [chatCartItemIds, setChatCartItemIds] = useState<string[]>([]);
+  const [resumeOrderId, setResumeOrderId] = useState<string | null>(null);
+
+  // "Place Order" opens this review first, listing everything added via
+  // chat with a checkbox per row -- same select/unselect pattern the real
+  // /cart page already uses (all selected by default; unselecting never
+  // deletes anything, it just leaves that item out of *this* order and
+  // sitting in the real cart for later). Only the checked subset is what
+  // actually gets scoped into ChatCheckoutPanel.
+  const [cartReview, setCartReview] = useState<CartReviewItem[] | null>(null);
+  const [reviewSelectedIds, setReviewSelectedIds] = useState<string[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
   const panelRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // The message list only exists in the DOM while view === "chat" -- coming
+  // back from checkout/review remounts it fresh at scrollTop 0, so an
+  // animated "smooth" scroll-to-bottom right after visibly slides the new
+  // content up from the top. Only animate when a message arrives while the
+  // list was already showing; jump straight to bottom on the first paint
+  // after returning to this view.
+  const previousViewRef = useRef(view);
 
   const suggestions =
     role === "ADMIN" ? ADMIN_SUGGESTIONS : role === "USER" ? USER_SUGGESTIONS : GUEST_SUGGESTIONS;
@@ -213,8 +308,10 @@ export default function ChatWidget() {
     role === "ADMIN" ? "Admin mode" : role === "USER" ? "Signed in" : "Online";
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isSending]);
+    const justReturnedToChat = view === "chat" && previousViewRef.current !== "chat";
+    bottomRef.current?.scrollIntoView({ behavior: justReturnedToChat ? "auto" : "smooth" });
+    previousViewRef.current = view;
+  }, [messages, isSending, view]);
 
   useEffect(() => {
     if (isOpen) {
@@ -300,6 +397,7 @@ export default function ChatWidget() {
             toolsUsed: result.data.toolsUsed,
             sources: result.data.sources,
             productCards: result.data.productCards,
+            relatedCards: result.data.relatedCards,
           },
         ]);
       } catch {
@@ -344,6 +442,10 @@ export default function ChatWidget() {
     setView("chat");
     setPendingDeleteId(null);
     setInput("");
+    setChatCartItemIds([]);
+    setResumeOrderId(null);
+    setCartReview(null);
+    setReviewSelectedIds([]);
   }
 
   const loadRecentChats = useCallback(async () => {
@@ -389,6 +491,10 @@ export default function ChatWidget() {
       );
       setCurrentSessionId(id);
       setView("chat");
+      setChatCartItemIds([]);
+      setResumeOrderId(null);
+      setCartReview(null);
+      setReviewSelectedIds([]);
     } finally {
       setIsLoadingThread(false);
     }
@@ -404,6 +510,212 @@ export default function ChatWidget() {
     }
 
     await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" }).catch(() => {});
+  }
+
+  async function addVariantToCart(variantId: string, productName: string, quantity: number) {
+    setCartError(null);
+    try {
+      const response = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variantId, quantity }),
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.success) {
+        setCartError(result?.message ?? "Unable to add that item to your cart.");
+        return;
+      }
+
+      const addedCartItemId: string | undefined = result?.data?.cartItem?.id;
+      if (addedCartItemId) {
+        setChatCartItemIds((prev) => (prev.includes(addedCartItemId) ? prev : [...prev, addedCartItemId]));
+      }
+
+      setVariantPicker(null);
+      setCartFeedback({ productName });
+      notifyCartUpdated();
+    } catch {
+      setCartError("Unable to add that item to your cart.");
+    }
+  }
+
+  async function handleAddToCartClick(card: ProductCard) {
+    setCartError(null);
+    setVariantLoadingId(card.id);
+    try {
+      const response = await fetch(`/api/products/${encodeURIComponent(card.slug)}/variants`);
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.success) {
+        setCartError("Unable to load options for that product.");
+        return;
+      }
+
+      const variants: ProductVariantOption[] = result.data.variants;
+      const purchasable = variants.filter((variant) => variant.inStock);
+
+      if (purchasable.length === 0) {
+        setCartError("That item is currently out of stock.");
+        return;
+      }
+
+      // Always opens the picker, even for a single-variant product -- it
+      // always asks for a quantity now, not just color/size when there's a
+      // choice to make.
+      setVariantPicker({ productId: card.id, productName: card.name, variants: purchasable });
+    } finally {
+      setVariantLoadingId(null);
+    }
+  }
+
+  // "Place Order" opens this review instead of jumping straight into
+  // checkout -- lists everything added via chat so far with a checkbox per
+  // row, all checked by default. Fetches through the same scoped GET
+  // /api/cart?itemIds=... ChatCheckoutPanel itself uses, so the review and
+  // the eventual checkout total are always reading the same numbers.
+  async function openCartReview() {
+    setCartFeedback(null);
+    setResumeOrderId(null);
+    setReviewError(null);
+    setCartReview(null);
+    setView("review");
+
+    if (chatCartItemIds.length === 0) {
+      return;
+    }
+
+    setReviewLoading(true);
+    try {
+      const query = chatCartItemIds.map(encodeURIComponent).join(",");
+      const response = await fetch(`/api/cart?itemIds=${query}`);
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.success) {
+        setReviewError(result?.message ?? "Unable to load your cart.");
+        return;
+      }
+
+      const items: CartReviewItem[] = result.data.items;
+      setCartReview(items);
+      setReviewSelectedIds(items.map((item) => item.id));
+    } catch {
+      setReviewError("Unable to load your cart.");
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  function toggleReviewItem(itemId: string) {
+    setReviewSelectedIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId],
+    );
+  }
+
+  function toggleAllReviewItems() {
+    if (!cartReview) return;
+    setReviewSelectedIds((prev) => (prev.length === cartReview.length ? [] : cartReview.map((item) => item.id)));
+  }
+
+  function continueFromReview() {
+    setResumeOrderId(null);
+    setView("checkout");
+  }
+
+  // No navigation here on purpose -- see chat-checkout-panel.tsx for why.
+  // The order already exists for real (CheckoutForm only calls this after
+  // the backend confirmed it); this just decides how the outcome is shown.
+  function handleOrderConfirmed(result: OrderConfirmedResult) {
+    setView("chat");
+    setResumeOrderId(null);
+    setChatCartItemIds([]);
+    setCartReview(null);
+    setReviewSelectedIds([]);
+    notifyCartUpdated();
+    notifyNotificationUpdated();
+
+    const methodLine =
+      result.paymentMethod === "CASH_ON_DELIVERY"
+        ? "You'll pay when it arrives."
+        : "Payment confirmed.";
+    const amountLine =
+      typeof result.amount === "number" ? `\n\n**Total:** ${formatPrice(result.amount)}` : "";
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: newId(),
+        role: "assistant",
+        content: `Order placed! **${result.orderNumber}**${amountLine}\n\n${methodLine} You can track it anytime under Order History.`,
+      },
+    ]);
+  }
+
+  // Same "don't fight the widget's own container" reasoning as
+  // handleOrderConfirmed, but for a failed card payment -- see
+  // chat-checkout-panel.tsx's doc comment for why PaymentFailedModal
+  // doesn't render right embedded here. The order itself is untouched
+  // (still sitting there, retryable) -- this only decides how the
+  // failure is shown and offers a way back into it.
+  function handleOrderFailed(failure: OrderFailedResult) {
+    setView("chat");
+    setResumeOrderId(null);
+    // createOrder() removes the cart items the moment the order is placed,
+    // before payment is even attempted -- so they're already gone from the
+    // cart at this point regardless of how the payment itself turns out.
+    // Without this, the header badge keeps showing the pre-order count.
+    notifyCartUpdated();
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: newId(),
+        role: "assistant",
+        content: failure.message,
+        failedOrder: { orderId: failure.orderId, orderNumber: failure.orderNumber },
+      },
+    ]);
+  }
+
+  // Handles both PaymentRequiredCard buttons. Marks that specific
+  // message's card resolved first (locking it -- see the type comment on
+  // ChatMessage.failedOrder) and bails out if it's already resolved, so a
+  // double click (or clicking again after scrolling back up) can't retry
+  // twice or queue up duplicate "I'll retry later" follow-ups.
+  function resolveFailedPayment(messageId: string, orderId: string, action: "retry" | "later") {
+    let alreadyResolved = false;
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.id !== messageId || !message.failedOrder) return message;
+        if (message.failedOrder.resolution) {
+          alreadyResolved = true;
+          return message;
+        }
+        return { ...message, failedOrder: { ...message.failedOrder, resolution: action } };
+      }),
+    );
+
+    if (alreadyResolved) return;
+
+    if (action === "retry") {
+      setCartFeedback(null);
+      setResumeOrderId(orderId);
+      setView("checkout");
+      return;
+    }
+
+    // "I'll retry later" stays in the widget instead of navigating away --
+    // just acknowledges it and hands the conversation back, same as any
+    // other assistant turn.
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: newId(),
+        role: "assistant",
+        content:
+          "No problem — your order is saved, and you can retry the payment anytime from your order's details page. What else can I help you with?",
+      },
+    ]);
   }
 
   return (
@@ -477,6 +789,28 @@ export default function ChatWidget() {
             onCancelDelete={() => setPendingDeleteId(null)}
             onConfirmDelete={deleteThread}
           />
+        ) : view === "review" ? (
+          <CartReviewPanel
+            items={cartReview}
+            selectedIds={reviewSelectedIds}
+            loading={reviewLoading}
+            error={reviewError}
+            onToggle={toggleReviewItem}
+            onToggleAll={toggleAllReviewItems}
+            onBack={() => setView("chat")}
+            onContinue={continueFromReview}
+          />
+        ) : view === "checkout" ? (
+          <ChatCheckoutPanel
+            onBack={() => {
+              setView("chat");
+              setResumeOrderId(null);
+            }}
+            onOrderConfirmed={handleOrderConfirmed}
+            onOrderFailed={handleOrderFailed}
+            chatCartItemIds={resumeOrderId ? [] : reviewSelectedIds}
+            resumeOrderId={resumeOrderId}
+          />
         ) : (
           <>
         <div className="flex-1 space-y-3 overflow-y-auto bg-gray-50 px-3 py-4">
@@ -508,7 +842,17 @@ export default function ChatWidget() {
               </div>
             ) : (
               <div key={message.id} className="space-y-1">
-                <AssistantBubble isError={message.isError}>{message.content}</AssistantBubble>
+                {message.failedOrder ? (
+                  <PaymentRequiredCard
+                    reason={message.content}
+                    orderNumber={message.failedOrder.orderNumber}
+                    resolution={message.failedOrder.resolution}
+                    onRetry={() => resolveFailedPayment(message.id, message.failedOrder!.orderId, "retry")}
+                    onDismiss={() => resolveFailedPayment(message.id, message.failedOrder!.orderId, "later")}
+                  />
+                ) : (
+                  <AssistantBubble isError={message.isError}>{message.content}</AssistantBubble>
+                )}
                 {(summarizeToolsUsed(message.toolsUsed) || summarizeSources(message.sources)) && (
                   <p className="pl-8 text-[10.5px] leading-tight text-gray-400">
                     {[summarizeToolsUsed(message.toolsUsed), summarizeSources(message.sources)]
@@ -517,7 +861,29 @@ export default function ChatWidget() {
                   </p>
                 )}
                 {message.productCards && message.productCards.length > 0 && (
-                  <ProductCardRow cards={message.productCards} />
+                  <ProductCardRow
+                    cards={message.productCards}
+                    canAddToCart={role === "USER"}
+                    loadingId={variantLoadingId}
+                    onAddClick={(card) => void handleAddToCartClick(card)}
+                  />
+                )}
+                {message.relatedCards && message.relatedCards.length > 0 && (
+                  <div className="space-y-2">
+                    {groupCardsByCategory(message.relatedCards).map((group) => (
+                      <div key={group.category} className="space-y-1">
+                        <p className="pl-8 text-[10.5px] font-medium text-gray-400">
+                          Related {group.category} products
+                        </p>
+                        <ProductCardRow
+                          cards={group.cards}
+                          canAddToCart={role === "USER"}
+                          loadingId={variantLoadingId}
+                          onAddClick={(card) => void handleAddToCartClick(card)}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             ),
@@ -538,6 +904,48 @@ export default function ChatWidget() {
 
           <div ref={bottomRef} />
         </div>
+
+        {cartError && (
+          <div className="shrink-0 border-t border-red-100 bg-red-50 px-3 py-2 text-[11.5px] text-red-700">
+            {cartError}
+          </div>
+        )}
+
+        {variantPicker && (
+          <VariantPickerPanel
+            productName={variantPicker.productName}
+            variants={variantPicker.variants}
+            onCancel={() => setVariantPicker(null)}
+            onAdd={(variantId, quantity) =>
+              void addVariantToCart(variantId, variantPicker.productName, quantity)
+            }
+          />
+        )}
+
+        {cartFeedback && (
+          <div className="shrink-0 border-t border-gray-200 bg-white p-3">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-gray-800">
+              <Check className="h-3.5 w-3.5 text-emerald-500" />
+              {cartFeedback.productName} added to your cart
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCartFeedback(null)}
+                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[12px] font-medium text-gray-700 transition hover:bg-gray-50"
+              >
+                Keep Shopping
+              </button>
+              <button
+                type="button"
+                onClick={() => void openCartReview()}
+                className="flex-1 rounded-lg bg-[#087ff5] px-3 py-2 text-[12px] font-medium text-white transition hover:bg-[#066ed6]"
+              >
+                Place Order
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex shrink-0 items-end gap-2 border-t border-gray-200 bg-white p-2.5">
           <textarea
@@ -582,6 +990,69 @@ export default function ChatWidget() {
           </span>
         )}
       </button>
+    </div>
+  );
+}
+
+// The real order-detail page shows a stuck-unpaid order in an amber
+// "Payment required" section (see src/app/orders/[id]/page.tsx), distinct
+// from a hard red error -- the order itself is fine, saved, and waiting.
+// This mirrors that same visual language in chat instead of a plain
+// error bubble, with explicit next steps rather than just the failure
+// reason.
+function PaymentRequiredCard({
+  reason,
+  orderNumber,
+  resolution,
+  onRetry,
+  onDismiss,
+}: {
+  reason: string;
+  orderNumber: string | null;
+  resolution?: "retry" | "later";
+  onRetry: () => void;
+  onDismiss: () => void;
+}) {
+  const resolved = Boolean(resolution);
+
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+        <Bot className="h-3.5 w-3.5" />
+      </span>
+      <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-3 py-2.5">
+        <p className="text-[13px] font-semibold text-amber-900">Payment required</p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-amber-800">{reason}</p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-amber-800">
+          Your order{" "}
+          {orderNumber ? <span className="font-semibold">{orderNumber}</span> : null} has been
+          saved to your Order History — nothing is lost. Retry the payment now, or anytime later
+          from the order&apos;s details page.
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={resolved}
+            className="rounded-lg bg-[#087ff5] px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-[#066ed6] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Retry payment now
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            disabled={resolved}
+            className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            I&apos;ll retry later
+          </button>
+        </div>
+        {resolved && (
+          <p className="mt-2 text-[11.5px] font-medium text-amber-700">
+            You selected: {resolution === "retry" ? "Retry payment now" : "I'll retry later"}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -712,7 +1183,17 @@ function RecentChatsView({
   );
 }
 
-function ProductCardRow({ cards }: { cards: ProductCard[] }) {
+function ProductCardRow({
+  cards,
+  canAddToCart,
+  loadingId,
+  onAddClick,
+}: {
+  cards: ProductCard[];
+  canAddToCart: boolean;
+  loadingId: string | null;
+  onAddClick: (card: ProductCard) => void;
+}) {
   return (
     <div className="ml-8 flex gap-2 overflow-x-auto pb-1 pr-1">
       {cards.map((card) => (
@@ -744,12 +1225,271 @@ function ProductCardRow({ cards }: { cards: ProductCard[] }) {
             <p className="line-clamp-2 text-[11px] font-medium leading-tight text-gray-800">
               {card.name}
             </p>
-            <p className="mt-0.5 text-[11px] font-semibold text-[#087ff5]">
-              {formatPrice(card.price)}
-            </p>
+            <div className="mt-0.5 flex items-center justify-between gap-1">
+              <p className="text-[11px] font-semibold text-[#087ff5]">{formatPrice(card.price)}</p>
+              {canAddToCart && card.inStock && (
+                <button
+                  type="button"
+                  onClick={() => onAddClick(card)}
+                  disabled={loadingId === card.id}
+                  aria-label={`Add ${card.name} to cart`}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#087ff5]/10 text-[#087ff5] transition hover:bg-[#087ff5]/20 disabled:opacity-50"
+                >
+                  {loadingId === card.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <ShoppingCart className="h-3 w-3" />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function VariantPickerPanel({
+  productName,
+  variants,
+  onCancel,
+  onAdd,
+}: {
+  productName: string;
+  variants: ProductVariantOption[];
+  onCancel: () => void;
+  onAdd: (variantId: string, quantity: number) => void;
+}) {
+  const colors = [...new Set(variants.map((v) => v.color).filter((v): v is string => Boolean(v)))];
+  const sizes = [...new Set(variants.map((v) => v.size).filter((v): v is string => Boolean(v)))];
+
+  const [selectedColor, setSelectedColor] = useState<string | null>(colors[0] ?? null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(sizes[0] ?? null);
+  const [quantity, setQuantity] = useState(1);
+
+  const matched = variants.find(
+    (v) => (colors.length === 0 || v.color === selectedColor) && (sizes.length === 0 || v.size === selectedSize),
+  );
+
+  // Different color/size can mean a different stock cap -- clamp at read
+  // time rather than resetting state in an effect, so switching to a
+  // lower-stock option never briefly shows an over-limit quantity.
+  const effectiveQuantity = matched ? Math.min(quantity, matched.stock) : quantity;
+
+  return (
+    <div className="shrink-0 border-t border-gray-200 bg-white p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[12.5px] font-semibold text-gray-800">{productName}</p>
+        <button type="button" onClick={onCancel} aria-label="Cancel" className="text-gray-400 hover:text-gray-600">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {colors.length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">Color</p>
+          <div className="flex flex-wrap gap-1.5">
+            {colors.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => setSelectedColor(color)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+                  selectedColor === color
+                    ? "border-[#087ff5] bg-[#087ff5]/10 text-[#087ff5]"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300",
+                )}
+              >
+                {color}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sizes.length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">Size</p>
+          <div className="flex flex-wrap gap-1.5">
+            {sizes.map((size) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => setSelectedSize(size)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+                  selectedSize === size
+                    ? "border-[#087ff5] bg-[#087ff5]/10 text-[#087ff5]"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300",
+                )}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-3">
+        <p className="mb-1 text-[10px] uppercase tracking-wide text-gray-400">Quantity</p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+            disabled={quantity <= 1}
+            aria-label="Decrease quantity"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+          >
+            <Minus className="h-3 w-3" />
+          </button>
+          <span className="w-5 text-center text-[13px] font-medium text-gray-800">{effectiveQuantity}</span>
+          <button
+            type="button"
+            onClick={() => setQuantity((q) => q + 1)}
+            disabled={!matched || effectiveQuantity >= matched.stock}
+            aria-label="Increase quantity"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+          {matched && (
+            <span className="text-[10.5px] text-gray-400">{matched.stock} available</span>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => matched && onAdd(matched.variantId, effectiveQuantity)}
+        disabled={!matched}
+        className="mt-1 flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#087ff5] text-[12.5px] font-medium text-white transition hover:bg-[#066ed6] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ShoppingCart className="h-3.5 w-3.5" />
+        {matched ? `Add to Cart · ${formatPrice(matched.price * effectiveQuantity)}` : "Select an option"}
+      </button>
+    </div>
+  );
+}
+
+// Mirrors the real /cart page's own select/unselect pattern (checkbox per
+// row, all checked by default) rather than a destructive remove -- an
+// unchecked item just sits out of *this* order, still in the real cart.
+function CartReviewPanel({
+  items,
+  selectedIds,
+  loading,
+  error,
+  onToggle,
+  onToggleAll,
+  onBack,
+  onContinue,
+}: {
+  items: CartReviewItem[] | null;
+  selectedIds: string[];
+  loading: boolean;
+  error: string | null;
+  onToggle: (itemId: string) => void;
+  onToggleAll: () => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const allSelected = items !== null && items.length > 0 && selectedIds.length === items.length;
+  // Matches CartSummary's own math (10% of subtotal) so this preview never
+  // disagrees with what checkout actually charges a moment later.
+  const selectedSubtotal = Math.round(
+    (items ?? [])
+      .filter((item) => selectedIds.includes(item.id))
+      .reduce((sum, item) => sum + item.lineTotal, 0),
+  );
+  const selectedTax = Math.round(selectedSubtotal * TAX_RATE);
+  const selectedGrandTotal = selectedSubtotal + selectedTax;
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-3 text-[11.5px] font-medium text-[#087ff5] hover:underline"
+      >
+        &larr; Back to chat
+      </button>
+
+      {loading ? (
+        <div className="flex justify-center py-10 text-gray-300">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : error || !items || items.length === 0 ? (
+        <p className="px-1 py-6 text-center text-[12.5px] text-gray-500">
+          {error ?? "Nothing to review yet."}
+        </p>
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-3">
+            <h2 className="text-[13.5px] font-semibold text-gray-900">Review your order</h2>
+            <button
+              type="button"
+              onClick={onToggleAll}
+              className="text-[11.5px] font-medium text-[#087ff5] hover:underline"
+            >
+              {allSelected ? "Unselect all" : "Select all"}
+            </button>
+          </div>
+
+          <div className="space-y-2.5">
+            {items.map((item) => {
+              const checked = selectedIds.includes(item.id);
+              return (
+                <label
+                  key={item.id}
+                  className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-gray-100 p-2.5 transition hover:border-gray-200"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggle(item.id)}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#087ff5]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-medium text-gray-800">{item.product}</p>
+                    <p className="mt-0.5 text-[10.5px] text-gray-400">
+                      {[item.color, item.size, `Qty ${item.quantity}`].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-[12.5px] font-semibold text-gray-800">
+                    {formatPrice(item.lineTotal)}
+                  </p>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-[12.5px]">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Subtotal</span>
+              <span className="text-gray-700">{formatPrice(selectedSubtotal)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Tax</span>
+              <span className="text-gray-700">{formatPrice(selectedTax)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+              <span className="font-medium text-gray-800">Total</span>
+              <span className="font-semibold text-gray-900">{formatPrice(selectedGrandTotal)}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={selectedIds.length === 0}
+            className="mt-3 h-10 w-full rounded-lg bg-[#087ff5] text-[12.5px] font-medium text-white transition hover:bg-[#066ed6] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {selectedIds.length === 0 ? "Select at least one item" : "Continue to checkout"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

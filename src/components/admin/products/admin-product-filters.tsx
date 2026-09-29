@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 
 import { useRouter, useSearchParams } from "next/navigation";
 
+import AdminFilterDropdown from "@/components/admin/admin-filter-dropdown";
+
 type CategoryOption = {
   id: string;
   name: string;
@@ -109,27 +111,23 @@ export default function AdminProductFilters({
       {/* Category */}
 
       <div className="flex items-center gap-2">
-        <div className="relative min-w-45 flex-1 lg:flex-none">
-          <select
-            value={initialCategory}
-            onChange={(event) =>
-              updateUrl({
-                category: event.target.value,
-              })
-            }
-            className="h-9 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-9 text-xs text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">All Categories</option>
-
-            {categories.map((category) => (
-              <option key={category.id} value={category.slug}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-
-          <SelectArrowIcon />
-        </div>
+        <AdminFilterDropdown
+          value={initialCategory}
+          onChange={(value) =>
+            updateUrl({
+              category: value,
+            })
+          }
+          placeholder="All Categories"
+          className="min-w-45 flex-1 lg:flex-none"
+          options={[
+            { value: "", label: "All Categories" },
+            ...categories.map((category) => ({
+              value: category.slug,
+              label: category.name,
+            })),
+          ]}
+        />
 
         {hasFilters ? (
           <button
@@ -166,25 +164,6 @@ function SearchIcon() {
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function SelectArrowIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-      aria-hidden="true"
-    >
-      <path
-        d="M6 8L10 12L14 8"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );

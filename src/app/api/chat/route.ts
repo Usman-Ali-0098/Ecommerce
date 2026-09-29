@@ -369,16 +369,59 @@ export async function POST(request: Request) {
     // the model's own reply actually named that product -- the strongest
     // available signal that it's genuinely part of the answer, not
     // incidental nearest-neighbor noise the customer never asked about.
-    let productCards = collectedCards;
-    if (productCards.length === 0) {
+    //
+    // Primary vs related: a search_products call for one named product
+    // (e.g. "do you have a smart watch") can still come back with other
+    // same-category items alongside the real match (the tool has no
+    // obligation to return exactly one result). Whatever the reply
+    // actually names by product name is "primary" (what was asked about);
+    // anything else the tool returned is "related" (shown separately in
+    // the UI, captioned, rather than mixed into one undifferentiated row).
+    // Two tool calls in the same turn (e.g. search_products then
+    // get_product_variants on the same item) can each contribute a
+    // ProductCard for the same underlying product -- dedupe by id before
+    // splitting, or the same card renders twice in one row (and React
+    // throws on the duplicate key).
+    const uniqueCards = Array.from(new Map(collectedCards.map((card) => [card.id, card])).values());
+
+    // Matching the model's free-text reply against a product name has to
+    // tolerate the model paraphrasing punctuation/spacing (e.g. reply says
+    // "Smart Wacth (GS-8) Ultra" with a space, the catalog name has none) --
+    // a plain substring check missed these and silently fell back to
+    // treating every returned card as primary, which is what caused the
+    // "everything in one row" bug. Stripping to alphanumerics before
+    // comparing makes the match robust to that.
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const replyNormalized = normalize(reply);
+    const mentionsCard = (card: ProductCard) => replyNormalized.includes(normalize(card.name));
+
+    let primaryCards: ProductCard[];
+    let relatedCards: ProductCard[];
+
+    if (uniqueCards.length > 0) {
+      primaryCards = uniqueCards.filter(mentionsCard);
+      relatedCards = uniqueCards.filter((card) => !mentionsCard(card));
+
+      // The model summarized rather than naming things individually (e.g.
+      // "we have a few options") -- don't relegate every card to "related"
+      // just because none were named verbatim.
+      if (primaryCards.length === 0) {
+        primaryCards = uniqueCards;
+        relatedCards = [];
+      }
+    } else {
       const productSourceIds = matches
         .filter((match) => match.sourceType === "PRODUCT")
         .map((match) => match.sourceId);
       const candidates = await getProductCardsByIds(productSourceIds);
-      const replyLower = reply.toLowerCase();
-      productCards = candidates.filter((card) => replyLower.includes(card.name.toLowerCase()));
+      primaryCards = candidates.filter(mentionsCard);
+      relatedCards = [];
     }
-    productCards = productCards.slice(0, MAX_PRODUCT_CARDS);
+
+    primaryCards = primaryCards.slice(0, MAX_PRODUCT_CARDS);
+    relatedCards = relatedCards
+      .filter((card) => !primaryCards.some((primary) => primary.id === card.id))
+      .slice(0, MAX_PRODUCT_CARDS);
 
     const response = NextResponse.json({
       success: true,
@@ -386,7 +429,8 @@ export async function POST(request: Request) {
         sessionId: session.id,
         reply,
         toolsUsed: toolCalls.map((call) => call.name),
-        productCards,
+        productCards: primaryCards,
+        relatedCards,
         sources: matches.map((match) => ({
           sourceType: match.sourceType,
           sourceId: match.sourceId,

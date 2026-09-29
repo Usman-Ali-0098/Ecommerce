@@ -17,7 +17,7 @@ export const USER_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: "get_my_orders",
     description:
-      "Lists the signed-in customer's most recent orders: order number, status, payment status, total, and item count. Use this for general questions like 'what have I ordered' or 'show my recent orders'.",
+      "Returns order counts for the signed-in customer's ENTIRE order history, plus full details for only the 5 most recent orders. `totalOrders` is the true count of every order on the account; `ordersByStatus` breaks that down by status (e.g. PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED -- a status missing from this object means 0 orders in that status). Always answer 'how many orders/how many cancelled/how many pending' etc. using totalOrders / ordersByStatus, never by counting the `orders` array -- that array is deliberately capped at the 5 most recent and is only for showing order-level detail (order number, total, item count) when asked to list or show recent orders, not for counting.",
     parametersJsonSchema: {
       type: "object",
       properties: {},
@@ -80,9 +80,29 @@ export async function runUserTool(
 ): Promise<Record<string, unknown>> {
   switch (name) {
     case "get_my_orders": {
-      const { orders } = await getUserOrders({ userId, page: 1, pageSize: 5 });
+      // getUserOrders already computes the real total via a separate
+      // prisma.order.count() query (see order.service.ts) -- surfacing it
+      // here as its own field, rather than only returning the 5-row
+      // sample, is what lets the model answer "how many orders do I have"
+      // correctly instead of just counting whatever's in the array. The
+      // per-status breakdown is the same idea one level further: groupBy
+      // only returns rows for statuses the account actually has (a status
+      // with zero orders just doesn't appear), so the tool description
+      // tells the model to treat "missing" as zero rather than "unknown".
+      const [{ orders, pagination }, statusCounts] = await Promise.all([
+        getUserOrders({ userId, page: 1, pageSize: 5 }),
+        prisma.order.groupBy({
+          by: ["status"],
+          where: { userId },
+          _count: { _all: true },
+        }),
+      ]);
 
       return {
+        totalOrders: pagination.total,
+        ordersByStatus: Object.fromEntries(
+          statusCounts.map((row) => [row.status, row._count._all]),
+        ),
         orders: orders.map((order) => ({
           orderNumber: order.orderNumber,
           status: order.status,

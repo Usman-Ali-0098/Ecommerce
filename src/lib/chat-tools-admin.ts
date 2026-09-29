@@ -66,7 +66,7 @@ export const ADMIN_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: "search_orders",
     description:
-      "Searches orders by order number, customer name, or email, optionally filtered by status. Use this to find a specific order (e.g. before updating its status) or answer 'find orders from...' style questions.",
+      "Searches orders by order number, customer name, or email, optionally filtered by status, plus full store-wide counts. `totalOrders` is the true count of every order matching the current search/status filters (not just the sample below); `ordersByStatus` is the same set's breakdown across PENDING/PROCESSING/SHIPPED/DELIVERED/CANCELLED regardless of any status filter (a status missing from this object means 0 orders in it). Always answer 'how many orders / how many cancelled / how many pending' etc. using totalOrders / ordersByStatus, never by counting the `orders` array -- that array is only the capped sample (default 5, max 15) for showing order-level detail, e.g. to find a specific order before updating it.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -208,10 +208,35 @@ export async function runAdminTool(
       const status = typeof args.status === "string" ? args.status : "";
       const limit = clampInt(args.limit, 5, 15);
 
-      const { orders } = await getAdminOrders({ search: query, status, page: 1, pageSize: limit });
+      const [{ orders, pagination }, statusCounts] = await Promise.all([
+        getAdminOrders({ search: query, status, page: 1, pageSize: limit }),
+        // Scoped to the search text only, deliberately never the status
+        // filter -- otherwise the breakdown would just show 100% in
+        // whichever single status was asked for. getAdminOrders() bundles
+        // search+status into one combined `where` with no way to ask for
+        // just one, so this is a small local query instead, same pattern
+        // get_sales_summary already uses in this file for its own
+        // status breakdown.
+        prisma.order.groupBy({
+          by: ["status"],
+          where: query
+            ? {
+                OR: [
+                  { orderNumber: { contains: query, mode: "insensitive" as const } },
+                  { user: { email: { contains: query, mode: "insensitive" as const } } },
+                  { user: { fullName: { contains: query, mode: "insensitive" as const } } },
+                ],
+              }
+            : {},
+          _count: { _all: true },
+        }),
+      ]);
 
       return {
-        count: orders.length,
+        totalOrders: pagination.total,
+        ordersByStatus: Object.fromEntries(
+          statusCounts.map((row) => [row.status, row._count._all]),
+        ),
         orders: orders.map((order) => ({
           orderNumber: order.orderNumber,
           customerName: order.customer.fullName,
