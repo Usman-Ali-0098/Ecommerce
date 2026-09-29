@@ -64,6 +64,16 @@ export const ADMIN_TOOL_DECLARATIONS: FunctionDeclaration[] = [
     },
   },
   {
+    name: "get_product_catalog_summary",
+    description:
+      "True store-wide product counts: total products (active AND inactive), active vs inactive, in-stock vs out-of-stock. Use for ANY question about how many products the store has overall, e.g. 'how many products do we have', 'how many are inactive', 'how many are out of stock'. Never answer these from search_products or <context> -- search_products is the customer-facing catalog search and deliberately only ever sees active, purchasable products, so it undercounts against the real total shown on the admin Products page.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "search_orders",
     description:
       "Searches orders by order number, customer name, or email, optionally filtered by status, plus full store-wide counts. `totalOrders` is the true count of every order matching the current search/status filters (not just the sample below); `ordersByStatus` is the same set's breakdown across PENDING/PROCESSING/SHIPPED/DELIVERED/CANCELLED regardless of any status filter (a status missing from this object means 0 orders in it). Always answer 'how many orders / how many cancelled / how many pending' etc. using totalOrders / ordersByStatus, never by counting the `orders` array -- that array is only the capped sample (default 5, max 15) for showing order-level detail, e.g. to find a specific order before updating it.",
@@ -200,6 +210,25 @@ export async function runAdminTool(
           failureCode: attempt.failureCode,
           attemptedAt: attempt.createdAt,
         })),
+      };
+    }
+
+    case "get_product_catalog_summary": {
+      const [totalProducts, activeProducts, outOfStockProducts] = await Promise.all([
+        prisma.product.count(),
+        prisma.product.count({ where: { isActive: true } }),
+        // A product with no variants in stock (including one with no
+        // variants at all -- `every` is vacuously true on an empty
+        // relation, which is the correct call: nothing to sell).
+        prisma.product.count({ where: { variants: { every: { stock: { lte: 0 } } } } }),
+      ]);
+
+      return {
+        totalProducts,
+        activeProducts,
+        inactiveProducts: totalProducts - activeProducts,
+        inStockProducts: totalProducts - outOfStockProducts,
+        outOfStockProducts,
       };
     }
 

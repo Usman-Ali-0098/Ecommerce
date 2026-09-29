@@ -26,7 +26,7 @@ export const PUBLIC_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: "search_products",
     description:
-      "Searches the live product catalog with real price filters and sorting. Use this for ANY question involving price ranking, comparison, or counting -- 'most expensive', 'cheapest', 'highest/lowest price', 'how many products under X', 'anything in stock under Rs 5000' -- instead of answering from memory or from <context>. This queries the actual current catalog, not a retrieved sample, so it is the only reliable source for these questions. When the customer names a SPECIFIC product (e.g. 'do you have a smart watch'), always pass `keyword` so results are precise -- omitting it returns a broader category/price listing, which is only right for genuine browsing questions like 'what's in your Tech category'.",
+      "Searches the live product catalog with real price filters and sorting. Use this for ANY question involving price ranking, comparison, or counting -- 'most expensive', 'cheapest', 'highest/lowest price', 'how many products under X', 'anything in stock under Rs 5000' -- instead of answering from memory or from <context>. This queries the actual current catalog, not a retrieved sample, so it is the only reliable source for these questions. `matchingCount` is the true total number of active, purchasable products matching the given filters -- always answer a 'how many' question with `matchingCount`, never by counting the `products` array, which is only a capped sample (default 5, max 10) for showing product-level detail. When the customer names a SPECIFIC product (e.g. 'do you have a smart watch'), always pass `keyword` so results are precise -- omitting it returns a broader category/price listing, which is only right for genuine browsing questions like 'what's in your Tech category'.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -88,46 +88,57 @@ export async function runPublicTool(
       const maxPrice = typeof args.maxPrice === "number" ? args.maxPrice : undefined;
       const inStockOnly = args.inStockOnly === true;
 
-      const variants = await prisma.productVariant.findMany({
-        where: {
+      const variantFilter = {
+        isActive: true,
+        ...(inStockOnly ? { stock: { gt: 0 } } : {}),
+        ...(minPrice !== undefined ? { price: { gte: minPrice } } : {}),
+        ...(maxPrice !== undefined ? { price: { lte: maxPrice } } : {}),
+      };
+      const productFilter = {
+        isActive: true,
+        ...(keyword ? { name: { contains: keyword, mode: "insensitive" as const } } : {}),
+        category: {
           isActive: true,
-          ...(inStockOnly ? { stock: { gt: 0 } } : {}),
-          ...(minPrice !== undefined ? { price: { gte: minPrice } } : {}),
-          ...(maxPrice !== undefined ? { price: { lte: maxPrice } } : {}),
-          product: {
-            isActive: true,
-            ...(keyword ? { name: { contains: keyword, mode: "insensitive" } } : {}),
-            category: {
-              isActive: true,
-              ...(category ? { name: { equals: category, mode: "insensitive" } } : {}),
-            },
-          },
+          ...(category ? { name: { equals: category, mode: "insensitive" as const } } : {}),
         },
-        select: {
-          price: true,
-          stock: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              category: { select: { name: true } },
-              images: {
-                orderBy: [{ isPrimary: "desc" }, { position: "asc" }],
-                take: 1,
-                select: { url: true },
+      };
+
+      const [variants, matchingCount] = await Promise.all([
+        prisma.productVariant.findMany({
+          where: { ...variantFilter, product: productFilter },
+          select: {
+            price: true,
+            stock: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                category: { select: { name: true } },
+                images: {
+                  orderBy: [{ isPrimary: "desc" }, { position: "asc" }],
+                  take: 1,
+                  select: { url: true },
+                },
               },
             },
           },
-        },
-        orderBy:
-          sortBy === "price_asc"
-            ? { price: "asc" }
-            : sortBy === "price_desc"
-              ? { price: "desc" }
-              : { createdAt: "desc" },
-        take: limit,
-      });
+          orderBy:
+            sortBy === "price_asc"
+              ? { price: "asc" }
+              : sortBy === "price_desc"
+                ? { price: "desc" }
+                : { createdAt: "desc" },
+          take: limit,
+        }),
+        // The true count of distinct products matching these filters, not
+        // just the capped sample above -- same pattern as get_my_orders /
+        // search_orders' totalOrders, for the same reason (the model was
+        // observed reporting the sample size as if it were the real total).
+        prisma.product.count({
+          where: { ...productFilter, variants: { some: variantFilter } },
+        }),
+      ]);
 
       const cards: ProductCard[] = variants.map((variant) => ({
         id: variant.product.id,
@@ -141,7 +152,8 @@ export async function runPublicTool(
 
       return {
         modelResult: {
-          count: cards.length,
+          matchingCount,
+          shown: cards.length,
           products: cards.map((card) => ({
             name: card.name,
             category: card.category,

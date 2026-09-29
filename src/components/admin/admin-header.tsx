@@ -11,6 +11,7 @@ import {
   Bell,
   CheckCheck,
   ChevronDown,
+  Database,
   LogOut,
   Menu,
   ShoppingBag,
@@ -25,6 +26,7 @@ import {
 } from "next-auth/react";
 
 import Image from "next/image"
+import Link from "next/link"
 import { useNotificationUpdates } from "@/hooks/use-notification-updates";
 import { useAdminSidebar } from "@/components/admin/admin-sidebar-context";
 
@@ -913,9 +915,31 @@ export default function AdminHeader({
                   </p>
                 </div>
 
-                {/* Logout */}
+                {/* Knowledge Base */}
 
                 <div className="p-1.5">
+                  <Link
+                    href="/admin/knowledge-base"
+                    onClick={() =>
+                      setProfileOpen(
+                        false
+                      )
+                    }
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
+                    <Database
+                      size={
+                        14
+                      }
+                    />
+
+                    Knowledge Base
+                  </Link>
+                </div>
+
+                {/* Logout */}
+
+                <div className="border-t border-gray-100 p-1.5">
                   <button
                     type="button"
                     onClick={() =>

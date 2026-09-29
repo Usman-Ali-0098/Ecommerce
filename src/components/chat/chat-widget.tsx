@@ -482,12 +482,23 @@ export default function ChatWidget() {
       }
 
       setMessages(
-        result.data.messages.map((entry: { id: string; role: "user" | "assistant"; content: string; toolsUsed: string[] }) => ({
-          id: entry.id,
-          role: entry.role,
-          content: entry.content,
-          toolsUsed: entry.toolsUsed,
-        })),
+        result.data.messages.map(
+          (entry: {
+            id: string;
+            role: "user" | "assistant";
+            content: string;
+            toolsUsed: string[];
+            productCards?: ProductCard[];
+            relatedCards?: ProductCard[];
+          }) => ({
+            id: entry.id,
+            role: entry.role,
+            content: entry.content,
+            toolsUsed: entry.toolsUsed,
+            productCards: entry.productCards,
+            relatedCards: entry.relatedCards,
+          }),
+        ),
       );
       setCurrentSessionId(id);
       setView("chat");

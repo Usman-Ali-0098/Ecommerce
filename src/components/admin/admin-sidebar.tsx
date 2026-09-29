@@ -20,11 +20,7 @@ const navItems = [
     href: "/admin/orders",
     icon: OrdersIcon,
   },
-  {
-    label: "Knowledge Base",
-    href: "/admin/knowledge-base",
-    icon: KnowledgeBaseIcon,
-  },
+
 ];
 
 export default function AdminSidebar() {
@@ -66,9 +62,8 @@ export default function AdminSidebar() {
       ) : null}
 
       <aside
-        className={`fixed top-14 bottom-0 left-0 z-50 w-64 overflow-y-auto border-r border-gray-200 bg-white shadow-xl shadow-gray-900/10 transition-transform duration-200 ease-out lg:sticky lg:top-14 lg:z-0 lg:h-[calc(100vh-56px)] lg:w-56 lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-14 bottom-0 left-0 z-50 w-64 overflow-y-auto border-r border-gray-200 bg-white shadow-xl shadow-gray-900/10 transition-transform duration-200 ease-out lg:sticky lg:top-14 lg:z-0 lg:h-[calc(100vh-56px)] lg:w-56 lg:shrink-0 lg:translate-x-0 lg:shadow-none ${open ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* Drawer Header (mobile / tablet only) */}
 
@@ -100,11 +95,10 @@ export default function AdminSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition ${
-                  active
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                }`}
+                className={`group flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition ${active
+                  ? "bg-blue-50 text-blue-600"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
               >
                 <Icon />
 
@@ -184,36 +178,4 @@ function OrdersIcon() {
   );
 }
 
-function KnowledgeBaseIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className="h-[18px] w-[18px] shrink-0"
-      aria-hidden="true"
-    >
-      <ellipse
-        cx="12"
-        cy="6"
-        rx="7"
-        ry="3"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
 
-      <path
-        d="M5 6V18C5 19.66 8.13 21 12 21C15.87 21 19 19.66 19 18V6"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-
-      <path
-        d="M5 12C5 13.66 8.13 15 12 15C15.87 15 19 13.66 19 12"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}

@@ -450,6 +450,7 @@ model ChatMessage {
   role      ChatMessageRole
   content   String
   toolCalls Json?
+  productCards Json?
   createdAt DateTime        @default(now())
 
   @@index([sessionId])

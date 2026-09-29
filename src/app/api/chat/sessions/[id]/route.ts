@@ -24,14 +24,28 @@ function extractToolNames(toolCalls: unknown): string[] {
   return [];
 }
 
+function extractProductCards(productCards: unknown): { primary: unknown[]; related: unknown[] } {
+  if (
+    productCards &&
+    typeof productCards === "object" &&
+    "primary" in productCards &&
+    Array.isArray((productCards as { primary: unknown }).primary)
+  ) {
+    const related =
+      "related" in productCards && Array.isArray((productCards as { related: unknown }).related)
+        ? (productCards as { related: unknown[] }).related
+        : [];
+    return { primary: (productCards as { primary: unknown[] }).primary, related };
+  }
+  return { primary: [], related: [] };
+}
+
 /** Loads one chat thread's full history, for switching to it from the
  * recent-chats list. Ownership-checked: an account can only ever load its
- * own threads. Note: this replays the saved text and which tools ran
- * (persisted on ChatMessage.toolCalls), but not the product-card /
- * retrieved-sources detail shown live in the moment -- that was never
- * persisted, only computed per-response, so reloaded history is text +
- * tool-usage only. A reasonable fidelity trade-off rather than adding new
- * persistence just for a cosmetic footer on old messages. */
+ * own threads. Replays the saved text, which tools ran (ChatMessage.toolCalls),
+ * and the resolved product cards (ChatMessage.productCards) exactly as they
+ * were shown live -- retrieval `sources`/similarity scores are still not
+ * persisted (cosmetic footer only), so those stay live-response-only. */
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const user = await getUserSession();
@@ -59,19 +73,24 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const messages = await prisma.chatMessage.findMany({
       where: { sessionId: session.id, role: { not: "TOOL" } },
       orderBy: { createdAt: "asc" },
-      select: { id: true, role: true, content: true, toolCalls: true },
+      select: { id: true, role: true, content: true, toolCalls: true, productCards: true },
     });
 
     return NextResponse.json({
       success: true,
       data: {
         session: { id: session.id, title: session.title?.trim() || "New chat" },
-        messages: messages.map((message) => ({
-          id: message.id,
-          role: message.role === "USER" ? "user" : "assistant",
-          content: message.content,
-          toolsUsed: extractToolNames(message.toolCalls),
-        })),
+        messages: messages.map((message) => {
+          const { primary, related } = extractProductCards(message.productCards);
+          return {
+            id: message.id,
+            role: message.role === "USER" ? "user" : "assistant",
+            content: message.content,
+            toolsUsed: extractToolNames(message.toolCalls),
+            productCards: primary,
+            relatedCards: related,
+          };
+        }),
       },
     });
   } catch (error) {

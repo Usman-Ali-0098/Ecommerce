@@ -78,9 +78,12 @@ the customer completes checkout themselves.`;
 const ADMIN_SYSTEM_INSTRUCTION = `${BASE_SYSTEM_INSTRUCTION}
 
 You are talking to a store admin, not a customer. You have read-only analytics tools (sales
-summary, low-stock variants, failed payments, order search) -- use one whenever a question needs
-current store data rather than guessing. <context> may also include internal-only notes not shown
-to customers.
+summary, low-stock variants, failed payments, order search, product catalog summary) -- use one
+whenever a question needs current store data rather than guessing. For "how many products" style
+questions specifically, always use get_product_catalog_summary, never search_products -- that tool
+is the customer-facing catalog search and only ever sees active, purchasable products, so it
+undercounts against the real total. <context> may also include internal-only notes not shown to
+customers.
 
 You also have update_order_status, which can move an order forward one stage at a time:
 PENDING -> PROCESSING -> SHIPPED -> DELIVERED, nothing else. Use it when asked to e.g. "mark order
@@ -332,34 +335,6 @@ export async function POST(request: Request) {
       executeTool,
     });
 
-    // Persist both turns (tool calls recorded on the assistant's row, for
-    // auditability -- see ChatMessage.toolCalls) and bump
-    // ChatSession.lastActiveAt, together.
-    await prisma.$transaction([
-      prisma.chatMessage.createMany({
-        data: [
-          { sessionId: session.id, role: "USER", content: message },
-          {
-            sessionId: session.id,
-            role: "ASSISTANT",
-            content: reply,
-            toolCalls:
-              toolCalls.length > 0
-                ? ({ calls: toolCalls } as unknown as Prisma.InputJsonValue)
-                : undefined,
-          },
-        ],
-      }),
-      prisma.chatSession.update({ where: { id: session.id }, data: {} }),
-    ], {
-      // Prisma's default maxWait (2s) to even acquire the transaction slot
-      // is too tight for Neon's serverless connection latency -- seen
-      // failing intermittently with P2028 "Unable to start a transaction
-      // in the given time" during testing, unrelated to load.
-      maxWait: 10_000,
-      timeout: 15_000,
-    });
-
     // search_products returning cards is a deliberate signal -- the model
     // chose to look products up, so always show them. But vector search
     // always returns its top-K *something* even for "hello" or "thanks"
@@ -422,6 +397,41 @@ export async function POST(request: Request) {
     relatedCards = relatedCards
       .filter((card) => !primaryCards.some((primary) => primary.id === card.id))
       .slice(0, MAX_PRODUCT_CARDS);
+
+    // Persist both turns (tool calls and the resolved product cards
+    // recorded on the assistant's row, for auditability -- see
+    // ChatMessage.toolCalls/productCards -- and so reloading a thread later
+    // (page refresh, or picking it from Recent) can still render the same
+    // cards instead of just the bare text) and bump ChatSession.lastActiveAt,
+    // together.
+    await prisma.$transaction([
+      prisma.chatMessage.createMany({
+        data: [
+          { sessionId: session.id, role: "USER", content: message },
+          {
+            sessionId: session.id,
+            role: "ASSISTANT",
+            content: reply,
+            toolCalls:
+              toolCalls.length > 0
+                ? ({ calls: toolCalls } as unknown as Prisma.InputJsonValue)
+                : undefined,
+            productCards:
+              primaryCards.length > 0 || relatedCards.length > 0
+                ? ({ primary: primaryCards, related: relatedCards } as unknown as Prisma.InputJsonValue)
+                : undefined,
+          },
+        ],
+      }),
+      prisma.chatSession.update({ where: { id: session.id }, data: {} }),
+    ], {
+      // Prisma's default maxWait (2s) to even acquire the transaction slot
+      // is too tight for Neon's serverless connection latency -- seen
+      // failing intermittently with P2028 "Unable to start a transaction
+      // in the given time" during testing, unrelated to load.
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
 
     const response = NextResponse.json({
       success: true,
