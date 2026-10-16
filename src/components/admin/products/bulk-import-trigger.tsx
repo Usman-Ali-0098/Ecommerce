@@ -3,15 +3,8 @@
 import { useState } from "react";
 
 import BulkImportModal from "@/components/admin/products/bulk-import-modal";
-import type { CategoryOption, ColorOption, SizeOption } from "@/lib/bulk-import-types";
 
-type Props = {
-  categories: CategoryOption[];
-  colors: ColorOption[];
-  sizes: SizeOption[];
-};
-
-export default function BulkImportTrigger({ categories, colors, sizes }: Props) {
+export default function BulkImportTrigger() {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,9 +20,6 @@ export default function BulkImportTrigger({ categories, colors, sizes }: Props) 
       <BulkImportModal
         open={open}
         onClose={() => setOpen(false)}
-        categories={categories}
-        colors={colors}
-        sizes={sizes}
       />
     </>
   );

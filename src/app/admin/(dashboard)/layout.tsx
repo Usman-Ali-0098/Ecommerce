@@ -5,7 +5,6 @@ import { getAdminSession } from "@/lib/admin-auth";
 import AdminHeader from "@/components/admin/admin-header";
 import AdminSidebar from "@/components/admin/admin-sidebar";
 import { AdminSidebarProvider } from "@/components/admin/admin-sidebar-context";
-import { BulkImportStoreProvider } from "@/components/admin/products/bulk-import-store";
 
 type AdminLayoutProps = {
   children: React.ReactNode;
@@ -38,7 +37,7 @@ export default async function AdminLayout({
 
           <main className="min-w-0 flex-1">
             <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
-              <BulkImportStoreProvider>{children}</BulkImportStoreProvider>
+              {children}
             </div>
           </main>
         </div>

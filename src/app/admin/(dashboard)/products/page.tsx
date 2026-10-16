@@ -41,40 +41,16 @@ export default async function AdminProductsPage({
       ? parsedPage
       : 1;
 
-  const [
-    productResult,
-    categories,
-    colors,
-    sizes,
-  ] = await Promise.all([
+  const [productResult, categories] = await Promise.all([
     getAdminProducts({
       search,
       category,
       page,
       pageSize: 20,
     }),
-
     prisma.category.findMany({
-      orderBy: {
-        name: "asc",
-      },
-
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        isActive: true,
-      },
-    }),
-
-    prisma.color.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, hexacode: true, isActive: true },
-    }),
-
-    prisma.size.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, sortOrder: true, isActive: true },
+      select: { id: true, name: true, slug: true },
     }),
   ]);
 
@@ -100,11 +76,7 @@ export default async function AdminProductsPage({
         </div>
 
         <div className="flex items-center gap-2">
-          <BulkImportTrigger
-            categories={categories}
-            colors={colors}
-            sizes={sizes}
-          />
+          <BulkImportTrigger />
 
           <Link
             href="/admin/products/new"

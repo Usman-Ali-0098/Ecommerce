@@ -16,6 +16,11 @@ const navItems = [
     icon: ProductsIcon,
   },
   {
+    label: "Imports",
+    href: "/admin/products/import",
+    icon: ImportsIcon,
+  },
+  {
     label: "Orders",
     href: "/admin/orders",
     icon: OrdersIcon,
@@ -81,33 +86,38 @@ export default function AdminSidebar() {
         </div>
 
         <nav className="space-y-1 p-3">
-          {navItems.map((item) => {
-            const active =
-              pathname === item.href ||
-              pathname.startsWith(
-                `${item.href}/`
+          {/* "/admin/products/import" is nested under "/admin/products", so
+              pick the longest (most specific) matching href rather than
+              letting both "Products" and "Imports" highlight at once. */}
+          {(() => {
+            const activeHref = navItems
+              .map((item) => item.href)
+              .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+              .sort((a, b) => b.length - a.length)[0];
+
+            return navItems.map((item) => {
+              const active = item.href === activeHref;
+
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`group flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition ${active
+                    ? "bg-blue-50 text-blue-600"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                >
+                  <Icon />
+
+                  <span>
+                    {item.label}
+                  </span>
+                </Link>
               );
-
-            const Icon =
-              item.icon;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`group flex h-10 items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition ${active
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                  }`}
-              >
-                <Icon />
-
-                <span>
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
+            });
+          })()}
         </nav>
       </aside>
     </>
@@ -141,6 +151,40 @@ function ProductsIcon() {
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ImportsIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className="h-[18px] w-[18px] shrink-0"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 3V14"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M7.5 9.5L12 14L16.5 9.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M4.75 16.5V17.5C4.75 18.74 5.76 19.75 7 19.75H17C18.24 19.75 19.25 18.74 19.25 17.5V16.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );

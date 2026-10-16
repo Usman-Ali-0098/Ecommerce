@@ -14,6 +14,7 @@ import {
   Database,
   LogOut,
   Menu,
+  PackageCheck,
   ShoppingBag,
 } from "lucide-react";
 
@@ -47,9 +48,13 @@ type AdminNotification = {
     | string
     | null;
 
+  jobRunId: string | null;
+
   type:
     | "NEW_ORDER"
-    | "ORDER_CANCELLED";
+    | "ORDER_CANCELLED"
+    | "KNOWLEDGE_REINDEX"
+    | "PRODUCT_IMPORT";
 
   title: string;
 
@@ -69,6 +74,12 @@ type AdminNotificationsResponse = {
 
     unreadCount:
       number;
+
+    nextCursor:
+      string | null;
+
+    hasMore:
+      boolean;
   };
 };
 
@@ -88,10 +99,14 @@ type AdminNotificationCountResponse = {
  * It does not update React state.
  */
 
-async function fetchAdminNotifications() {
+async function fetchAdminNotifications(cursor?: string | null) {
+  const query = cursor
+    ? `?cursor=${encodeURIComponent(cursor)}`
+    : "";
+
   const response =
     await fetch(
-      "/api/admin/notifications",
+      `/api/admin/notifications${query}`,
       {
         method:
           "GET",
@@ -189,6 +204,24 @@ export default function AdminHeader({
     useState(false);
 
   const [
+    nextNotificationsCursor,
+    setNextNotificationsCursor,
+  ] =
+    useState<string | null>(null);
+
+  const [
+    hasMoreNotifications,
+    setHasMoreNotifications,
+  ] =
+    useState(false);
+
+  const [
+    isLoadingMoreNotifications,
+    setIsLoadingMoreNotifications,
+  ] =
+    useState(false);
+
+  const [
     isMarkingAll,
     setIsMarkingAll,
   ] =
@@ -212,6 +245,11 @@ export default function AdminHeader({
     );
 
   const notificationRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
+
+  const notificationListRef =
     useRef<HTMLDivElement | null>(
       null
     );
@@ -266,6 +304,14 @@ export default function AdminHeader({
           data.unreadCount
         ) || 0
       );
+
+      setNextNotificationsCursor(
+        data.nextCursor
+      );
+
+      setHasMoreNotifications(
+        data.hasMore
+      );
     } catch (error) {
       console.error(
         "Load admin notifications error:",
@@ -279,6 +325,82 @@ export default function AdminHeader({
           false
         );
       }
+    }
+  }
+
+  /*
+   * --------------------------------
+   * LOAD OLDER NOTIFICATIONS
+   * --------------------------------
+   *
+   * Appends the next page when the
+   * admin scrolls near the bottom
+   * of the notification list.
+   */
+
+  async function loadMoreNotifications() {
+    if (
+      !hasMoreNotifications ||
+      isLoadingMoreNotifications ||
+      !nextNotificationsCursor
+    ) {
+      return;
+    }
+
+    try {
+      setIsLoadingMoreNotifications(
+        true
+      );
+
+      const data =
+        await fetchAdminNotifications(
+          nextNotificationsCursor
+        );
+
+      setNotifications(
+        (current) => [
+          ...current,
+          ...data.notifications,
+        ]
+      );
+
+      setNextNotificationsCursor(
+        data.nextCursor
+      );
+
+      setHasMoreNotifications(
+        data.hasMore
+      );
+    } catch (error) {
+      console.error(
+        "Load more admin notifications error:",
+        error
+      );
+    } finally {
+      setIsLoadingMoreNotifications(
+        false
+      );
+    }
+  }
+
+  function handleNotificationListScroll() {
+    const list =
+      notificationListRef.current;
+
+    if (!list) {
+      return;
+    }
+
+    const distanceFromBottom =
+      list.scrollHeight -
+      list.scrollTop -
+      list.clientHeight;
+
+    if (
+      distanceFromBottom <
+      80
+    ) {
+      void loadMoreNotifications();
     }
   }
 
@@ -433,6 +555,9 @@ export default function AdminHeader({
       router.push(
         `/admin/orders/${notification.orderId}`
       );
+    }
+    if (notification.jobRunId) {
+      router.push(`/admin/products/import/${notification.jobRunId}`);
     }
   }
 
@@ -714,7 +839,15 @@ export default function AdminHeader({
 
                 {/* Notification List */}
 
-                <div className="max-h-90 overflow-y-auto">
+                <div
+                  ref={
+                    notificationListRef
+                  }
+                  onScroll={
+                    handleNotificationListScroll
+                  }
+                  className="max-h-90 overflow-y-auto"
+                >
                   {isLoadingNotifications &&
                   notifications.length ===
                     0 ? (
@@ -776,17 +909,18 @@ export default function AdminHeader({
 
                           <div
                             className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                              notification.type ===
-                              "ORDER_CANCELLED"
+                              notification.type === "ORDER_CANCELLED"
                                 ? "bg-red-50 text-red-600"
-                                : "bg-blue-50 text-blue-600"
+                                : notification.type === "PRODUCT_IMPORT"
+                                  ? "bg-violet-50 text-violet-600"
+                                  : "bg-blue-50 text-blue-600"
                             }`}
                           >
-                            <ShoppingBag
-                              size={
-                                14
-                              }
-                            />
+                            {notification.type === "PRODUCT_IMPORT" ? (
+                              <PackageCheck size={14} />
+                            ) : (
+                              <ShoppingBag size={14} />
+                            )}
                           </div>
 
                           {/* Notification Content */}
@@ -820,6 +954,16 @@ export default function AdminHeader({
                       )
                     )
                   )}
+
+                  {/* Load More */}
+
+                  {isLoadingMoreNotifications ? (
+                    <div className="px-4 py-3 text-center">
+                      <p className="text-[10px] text-gray-400">
+                        Loading more...
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}

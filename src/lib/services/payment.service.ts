@@ -51,13 +51,8 @@ export async function createStripeCheckout({
   });
 }
 
-/**
- * Retry uses the exact same mechanism as a fresh checkout — a plain
- * PaymentIntent behind <Elements>/<PaymentElement> — instead of the separate
- * Stripe Checkout Session flow below. Mixing the two was the source of the
- * "cart item invalid" bug: they're different Stripe primitives with
- * different lookup keys, and reused inconsistently.
- */
+
+
 export async function createStripeRetryPaymentIntent({
   userId,
   orderId,
@@ -77,13 +72,6 @@ export async function createStripeRetryPaymentIntent({
 
   if (activeAttempt?.stripePaymentIntentId) {
     const intent = await getStripe().paymentIntents.retrieve(activeAttempt.stripePaymentIntentId);
-    // Only resume a PaymentIntent that's genuinely still mid-flow (e.g. a
-    // pending 3D Secure challenge) — Stripe requires continuing the exact
-    // same object for those. "requires_payment_method" means a previous
-    // confirm on this object already failed; starting a fresh PaymentIntent
-    // there instead of reusing it again avoids ever accumulating enough
-    // failed confirms on one object to trip Stripe's own anti-abuse
-    // confirmation-attempt limit, which would strand even a valid card.
     const resumableStatuses = new Set(["requires_action", "requires_confirmation", "processing"]);
     if (resumableStatuses.has(intent.status) && intent.client_secret) {
       return {
@@ -94,13 +82,7 @@ export async function createStripeRetryPaymentIntent({
       };
     }
 
-    // The PaymentIntent is dead (declined, or otherwise back at
-    // requires_payment_method) but the order is still sitting at UNPAID —
-    // normally a payment_intent.payment_failed webhook flips it back to
-    // FAILED, but we can't assume that's fired yet by the time the customer
-    // hits Retry, so close it out here too. Without this, reserveExisting-
-    // OrderForRetry below (which only accepts FAILED/EXPIRED) rejects every
-    // retry attempt forever with "no longer eligible for payment retry".
+
     await closePaymentAttempt({
       paymentAttemptId: activeAttempt.id,
       status: "FAILED",
@@ -194,12 +176,8 @@ export async function createStripePaymentIntentForAttempt({
     amount: toMinorUnits(Number(attempt.amount)),
     currency: attempt.currency,
     customer: customerId,
-    // Card only: the client uses the classic per-field card elements, which
-    // never offer Link or other alternative payment methods anyway, but this
-    // keeps the PaymentIntent itself restricted too.
     payment_method_types: ["card"],
-    // Not set here: the client passes setup_future_usage at confirm time
-    // (stripe.confirmCardPayment), driven by the "save this card" checkbox.
+
     metadata: {
       localOrderId: attempt.orderId,
       localPaymentAttemptId: attempt.id,
@@ -270,15 +248,15 @@ async function createCheckoutSessionForReservedOrder({
           })),
           ...(reservedOrder.tax > 0
             ? [
-                {
-                  quantity: 1,
-                  price_data: {
-                    currency: CURRENCY,
-                    unit_amount: toMinorUnits(reservedOrder.tax),
-                    product_data: { name: "Tax" },
-                  },
+              {
+                quantity: 1,
+                price_data: {
+                  currency: CURRENCY,
+                  unit_amount: toMinorUnits(reservedOrder.tax),
+                  product_data: { name: "Tax" },
                 },
-              ]
+              },
+            ]
             : []),
         ],
         metadata: {
@@ -335,12 +313,12 @@ async function createCheckoutSessionForReservedOrder({
   }
 }
 
+
+
+// if the customer first opened card payment and then changed their mind, invalidate that already-created
+// session so it cannot be paid after the order becomes COD.
 export async function placeCashOnDeliveryOrder(userId: number, orderId: string) {
-  // Covers both a fresh COD checkout (order/attempt still UNPAID) and
-  // switching to COD from the retry flow — where the order can be sitting
-  // at FAILED, REQUIRES_ACTION, or EXPIRED because it was never (or not
-  // yet) reserved for another card attempt. Any of those is fine to convert
-  // straight to COD; only a PAID or already-CANCELED attempt is off limits.
+
   const attempt = await prisma.paymentAttempt.findFirst({
     where: {
       orderId,
@@ -360,9 +338,7 @@ export async function placeCashOnDeliveryOrder(userId: number, orderId: string) 
     throw new PaymentServiceError("This order is not available for cash on delivery.");
   }
 
-  // A direct COD selection never reaches Stripe. If the customer first opened
-  // card payment and then changed their mind, invalidate that already-created
-  // session so it cannot be paid after the order becomes COD.
+  // A direct COD selection never reaches Stripe.
   if (attempt.stripeCheckoutSessionId) {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(attempt.stripeCheckoutSessionId);
@@ -529,12 +505,7 @@ async function closePaymentAttempt({
     await tx.order.update({
       where: { id: attempt.orderId },
       data: {
-        // No attempt-count limit any more — paymentRetryExpiresAt (fixed at
-        // order creation) is the only deadline for how long this order can
-        // still be retried, so it's left untouched here. The expiry job
-        // owns terminal cancellation and the idempotent inventory release,
-        // and now keys off that same field, so the order becomes eligible
-        // for it the moment paymentRetryExpiresAt naturally passes.
+
         status: "PENDING",
         paymentStatus: status,
       },
@@ -625,29 +596,29 @@ async function finalizePaidAttempt(
       userId: attempt.order.userId,
       invoice: attempt.order.shippingEmail
         ? {
-            to: attempt.order.shippingEmail,
-            customerName: attempt.order.shippingName ?? "Customer",
-            orderNumber: attempt.order.orderNumber,
-            subtotal: Number(attempt.order.subtotal),
-            tax: Number(attempt.order.tax),
-            total: Number(attempt.order.total),
-            items: items.map((item) => ({
-              productName: item.productName,
-              sku: item.sku,
-              colorName: item.colorName,
-              sizeName: item.sizeName,
-              quantity: item.quantity,
-              unitPrice: Number(item.unitPrice),
-              lineTotal: Number(item.lineTotal),
-            })),
-            shippingAddress: {
-              name: attempt.order.shippingName,
-              address: attempt.order.shippingAddress,
-              city: attempt.order.shippingCity,
-              postalCode: attempt.order.shippingPostalCode,
-              country: attempt.order.shippingCountry,
-            },
-          }
+          to: attempt.order.shippingEmail,
+          customerName: attempt.order.shippingName ?? "Customer",
+          orderNumber: attempt.order.orderNumber,
+          subtotal: Number(attempt.order.subtotal),
+          tax: Number(attempt.order.tax),
+          total: Number(attempt.order.total),
+          items: items.map((item) => ({
+            productName: item.productName,
+            sku: item.sku,
+            colorName: item.colorName,
+            sizeName: item.sizeName,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            lineTotal: Number(item.lineTotal),
+          })),
+          shippingAddress: {
+            name: attempt.order.shippingName,
+            address: attempt.order.shippingAddress,
+            city: attempt.order.shippingCity,
+            postalCode: attempt.order.shippingPostalCode,
+            country: attempt.order.shippingCountry,
+          },
+        }
         : null,
     };
   });
@@ -779,6 +750,9 @@ async function rememberSuccessfulPaymentMethod(session: Stripe.Checkout.Session)
   await rememberPaymentMethodFromIntent(paymentIntentId);
 }
 
+
+
+// webhook function
 export async function processStripeWebhook(event: Stripe.Event) {
   const existing = await prisma.stripeWebhookEvent.findUnique({
     where: { id: event.id },

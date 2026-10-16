@@ -45,27 +45,9 @@ type Props = {
   publishableKey?: string;
   orderId?: string;
   checkoutId?: string;
-  // The order's human-facing number, for a resumed order (orderId given,
-  // no cartItemIds) -- onOrderPlaced only fires for a fresh order, so a
-  // resume has nothing else to seed the local orderNumber state from.
-  // Unused by the real /checkout/[sessionId] retry page (it never shows
-  // this inline, only after a router.push away), only by the embedded
-  // chat flow which does.
   orderNumber?: string;
   shipping: Shipping;
-  // Given only by embedded callers (the chat widget) that render this form
-  // outside the real /checkout page's own routed tree -- see its call site
-  // for why a route change there doesn't behave the way it does here. When
-  // omitted, behavior is exactly what it always was: navigate to the real
-  // confirmation page.
   onOrderConfirmed?: (result: OrderConfirmedResult) => void;
-  // Same reasoning as onOrderConfirmed, but for a failed card payment:
-  // PaymentFailedModal is a `fixed inset-0` dialog meant to cover the real
-  // page. Nested inside the widget's own animated (transformed) panel, a
-  // `fixed` element's containing block becomes that panel instead of the
-  // viewport -- it renders trapped and tiny rather than full-screen. When
-  // this is given, that modal is skipped entirely and the failure is
-  // handed back for the widget to show its own way instead.
   onOrderFailed?: (failure: OrderFailedResult) => void;
 };
 
@@ -78,10 +60,8 @@ type SavedPaymentMethod = {
   isDefault: boolean;
 };
 
-// Classic per-field card elements (card number / expiry / CVC only) instead
-// of the auto-rendering PaymentElement: PaymentElement pulls in Link
-// enrollment prompts, wallet buttons, and a "save my info" panel that can't
-// be fully suppressed via its options. These have none of that by design.
+
+
 const CLASSIC_ELEMENT_OPTIONS = {
   style: {
     base: {
@@ -94,9 +74,7 @@ const CLASSIC_ELEMENT_OPTIONS = {
   },
 };
 
-// CardNumberElement still shows Stripe's own "Autofill"/Link button on top
-// of everything above unless explicitly turned off — disableLink is only a
-// valid option on this element, not on CardExpiryElement/CardCvcElement.
+
 const CARD_NUMBER_ELEMENT_OPTIONS = {
   ...CLASSIC_ELEMENT_OPTIONS,
   disableLink: true,
@@ -162,11 +140,10 @@ function CardEntryFields({
           {savedMethods.map((method) => (
             <label
               key={method.id}
-              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-xs transition ${
-                selection === method.id
-                  ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
-                  : "border-gray-200 bg-white hover:border-gray-300"
-              }`}
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 text-xs transition ${selection === method.id
+                ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+                : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
             >
               <span className="flex items-center gap-2">
                 <input
@@ -191,11 +168,10 @@ function CardEntryFields({
             </label>
           ))}
           <label
-            className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs transition ${
-              selection === "new"
-                ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
-                : "border-gray-200 bg-white hover:border-gray-300"
-            }`}
+            className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs transition ${selection === "new"
+              ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+              : "border-gray-200 bg-white hover:border-gray-300"
+              }`}
           >
             <input
               type="radio"
@@ -277,10 +253,6 @@ function CardPaymentForm({
   cartItemIds?: string[];
   total?: number;
   resume?: { clientSecret: string; orderId: string };
-  // Only meaningful alongside resume -- CardPaymentForm's own placedOrder
-  // never learns an order number for a resumed session (the fetch that
-  // sets it is skipped whenever clientSecret already exists), so the
-  // caller has to hand over the one it already knows.
   resumeOrderNumber?: string;
   onOrderPlaced: (orderId: string, orderNumber: string) => void;
   onFailure: (orderId: string, message: string) => void;
@@ -290,6 +262,7 @@ function CardPaymentForm({
   const stripe = useStripe();
   const elements = useElements();
   const savedMethods = useSavedPaymentMethods();
+
   // null = customer hasn't explicitly picked yet, so default to the saved
   // card (if any) without needing a setState-in-effect once it loads.
   const [explicitSelection, setExplicitSelection] = useState<string | null>(null);
@@ -304,10 +277,7 @@ function CardPaymentForm({
     event.preventDefault();
     if (!stripe || !elements) return;
 
-    // Set once the order actually exists (immediately for a retry, which
-    // already has one). Any failure from this point on must go through
-    // onFailure instead of a local error — re-submitting this form would
-    // otherwise try to re-place the order against an already-emptied cart.
+
     let placedOrder: PlacedOrder | null = resume
       ? { orderId: resume.orderId, orderNumber: resumeOrderNumber }
       : null;
@@ -354,15 +324,15 @@ function CardPaymentForm({
       const confirmation =
         selection === "new"
           ? await stripe.confirmCardPayment(clientSecret, {
-              payment_method: {
-                card: elements.getElement(CardNumberElement)!,
-                billing_details: billingDetailsFor(shipping),
-              },
-              setup_future_usage: saveCard ? "off_session" : undefined,
-            })
+            payment_method: {
+              card: elements.getElement(CardNumberElement)!,
+              billing_details: billingDetailsFor(shipping),
+            },
+            setup_future_usage: saveCard ? "off_session" : undefined,
+          })
           : await stripe.confirmCardPayment(clientSecret, {
-              payment_method: selection,
-            });
+            payment_method: selection,
+          });
 
       if (confirmation.error) {
         if (placedOrder) {
@@ -452,11 +422,6 @@ export default function CheckoutForm({
   const router = useRouter();
   const activeOrderId = orderId ?? checkoutId ?? "";
   const [shipping, setShipping] = useState(initialShipping);
-  // A resumed/retried order (orderId given, no cartItemIds — the only two
-  // real callers are the fresh-checkout page, which always has
-  // cartItemIds, and the retry page, which never does) already has its
-  // shipping details saved, so it goes straight to choosing a payment
-  // method instead of re-asking for delivery info.
   const [step, setStep] = useState<"delivery" | "payment">(
     cartItemIds ? "delivery" : "payment",
   );
@@ -514,10 +479,7 @@ export default function CheckoutForm({
     setFailure({ orderId: failedOrderId, message });
   }
 
-  // Shared by two triggers: retrying after an in-page failure, and a
-  // resumed order's first "Card" click (no failure to retry from yet,
-  // there's just no payment session started until the customer asks for
-  // one — see the "card" Choice's onClick below).
+
   async function beginCardPayment(targetOrderId: string) {
     setRetryBusy(true);
     setRetryError(null);
@@ -729,11 +691,7 @@ export default function CheckoutForm({
                   setChoice("card");
                   setError(null);
 
-                  // Fresh checkout already has cartItemIds and creates its
-                  // PaymentIntent on "Pay now" via CardPaymentForm itself.
-                  // A resumed order has neither cartItemIds nor a session
-                  // yet — nothing creates one until the customer actually
-                  // picks Card, which is here.
+
                   if (!cartItemIds && activeOrderId && !retrySession && !retryBusy) {
                     void beginCardPayment(activeOrderId);
                   }
@@ -833,18 +791,16 @@ function Choice({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition ${
-        selected
-          ? "border-[#087ff5] bg-blue-50 ring-1 ring-[#087ff5]"
-          : "border-gray-200 bg-white hover:border-gray-300"
-      }`}
+      className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition ${selected
+        ? "border-[#087ff5] bg-blue-50 ring-1 ring-[#087ff5]"
+        : "border-gray-200 bg-white hover:border-gray-300"
+        }`}
     >
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-            selected ? "border-[#087ff5]" : "border-gray-300"
-          }`}
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-[#087ff5]" : "border-gray-300"
+            }`}
         >
           {selected ? <span className="h-2 w-2 rounded-full bg-[#087ff5]" /> : null}
         </span>

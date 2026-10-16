@@ -35,10 +35,8 @@ type SendEmailJobParams = {
   requestedBy?: number;
 };
 
-/** Enqueues an email send. Resolves with the JobRun id once FastAPI has
- * accepted the job (202) — the actual SMTP send happens asynchronously in a
- * Celery worker. Poll prisma.jobRun.findUnique({ where: { id: jobId } }) for
- * status/results rather than assuming success here. */
+// email sending job
+
 export async function sendEmailJob({
   to,
   subject,
@@ -61,61 +59,34 @@ export async function sendEmailJob({
   return response.json();
 }
 
-type ImportProduct = {
-  name: string;
-  description: string;
-  categoryId: string;
-  isActive: boolean;
-  images: Array<{
-    url: string;
-    publicId: string;
-    colorId: string | null;
-    position?: number;
-    isPrimary: boolean;
-  }>;
-  variants: Array<{
-    sku: string;
-    price: number;
-    stock: number;
-    colorId: string | null;
-    sizeId: string | null;
-    imageUrl: string | null;
-    imagePublicId: string | null;
-  }>;
-};
 
-/** Enqueues a bulk product import — one JobRunItem per product, one Celery
- * task per product. Poll prisma.jobRun.findUnique({ where: { id: jobId },
- * include: { items: true } }) for per-product progress/results. */
-export async function sendProductImportJob({
-  products,
-  requestedBy,
+
+
+// Enqueue a CSV event that Next.js has already persisted in JobRun. The
+// worker receives only the durable event ID and reads the CSV from storage.
+export async function sendBulkCsvImportJob({
+  jobRunId,
 }: {
-  products: ImportProduct[];
-  requestedBy?: number;
-}): Promise<{ jobId: string }> {
-  const response = await fetch(jobsServiceUrl("/jobs/products/import"), {
+  jobRunId: string;
+}): Promise<{ jobId: string; taskId: string | null; status: string }> {
+  const response = await fetch(jobsServiceUrl("/jobs/bulk-upload"), {
     method: "POST",
     headers: jobsServiceHeaders(),
-    body: JSON.stringify({ products, requested_by: requestedBy }),
+    body: JSON.stringify({ jobRunId }),
   });
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new JobsServiceError(
-      body?.detail ?? `Jobs service returned ${response.status} for /jobs/products/import.`,
+      body?.detail ?? `Jobs service returned ${response.status} for /jobs/bulk-upload.`,
     );
   }
 
   return response.json();
 }
 
-/** Rebuilds the chatbot's RAG knowledge index (every active Product and
- * Category, plus the hardcoded policy/FAQ entries in the jobs service) — one
- * JobRunItem + one Celery task per source, run in parallel across workers.
- * Safe to call repeatedly: each write is an upsert. Poll
- * prisma.jobRun.findUnique({ where: { id: jobId }, include: { items: true } })
- * for progress. */
+
+// chatbot knowledge reindex job
 export async function sendKnowledgeReindexJob({
   requestedBy,
 }: {

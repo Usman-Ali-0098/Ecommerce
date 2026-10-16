@@ -81,12 +81,43 @@ type ProductInitialData = {
   variants: InitialVariant[];
 };
 
+// Seeds the form's fields without putting it into edit mode (no real
+// product/variant ids exist yet) — used to prefill a blank "create" submit
+// from a failed bulk-import row, so the admin fixes just the bad field
+// instead of retyping the whole product.
+type ProductPrefillVariant = {
+  sku: string;
+  price: number;
+  stock: number;
+  colorId: string | null;
+  colorName: string | null;
+  sizeId: string | null;
+  sizeName: string | null;
+};
+
+type ProductPrefillData = {
+  name: string;
+  description: string;
+  categoryId: string;
+  isActive: boolean;
+  baseSku: string;
+  variants: ProductPrefillVariant[];
+};
+
+type RetryContext = {
+  jobId: string;
+  itemId: string;
+  errorMessage?: string;
+};
+
 type AdminProductFormProps = {
   categories: CategoryOption[];
   colors: ColorOption[];
   sizes: SizeOption[];
 
   initialData?: ProductInitialData;
+  prefill?: ProductPrefillData;
+  retryContext?: RetryContext;
 };
 
 type AddedVariant = {
@@ -153,6 +184,8 @@ export default function AdminProductForm({
   colors,
   sizes,
   initialData,
+  prefill,
+  retryContext,
 }: AdminProductFormProps) {
   const router = useRouter();
 
@@ -160,18 +193,24 @@ export default function AdminProductForm({
 
   const isEditMode = Boolean(initialData);
 
+  // `seed` provides initial field values for EITHER a real edit (initialData,
+  // has real ids, submits via PUT) OR a prefilled create (prefill, no ids,
+  // still submits via POST) — isEditMode stays tied to `initialData` alone so
+  // prefill never accidentally triggers edit/PUT behavior.
+  const seed = initialData ?? prefill;
+
   // SIMPLE PRODUCT CHECK
 
   const initialIsSimple =
-    initialData?.variants.length === 1 &&
-    !initialData.variants[0]?.colorId &&
-    !initialData.variants[0]?.sizeId;
+    seed?.variants.length === 1 &&
+    !seed.variants[0]?.colorId &&
+    !seed.variants[0]?.sizeId;
 
   // PRODUCT STATE
 
-  const [name, setName] = useState(initialData?.name ?? "");
+  const [name, setName] = useState(seed?.name ?? "");
 
-  const [categoryId, setCategoryId] = useState(initialData?.categoryId ?? "");
+  const [categoryId, setCategoryId] = useState(seed?.categoryId ?? "");
 
   const [categoryOptions, setCategoryOptions] =
     useState<CategoryOption[]>(categories);
@@ -202,20 +241,20 @@ export default function AdminProductForm({
   const [isAddingSize, setIsAddingSize] = useState(false);
 
   const [price, setPrice] = useState(
-    initialData?.variants[0]?.price?.toString() ?? "",
+    seed?.variants[0]?.price?.toString() ?? "",
   );
 
   const [quantity, setQuantity] = useState(
-    initialIsSimple ? initialData!.variants[0].stock.toString() : "",
+    initialIsSimple ? seed!.variants[0].stock.toString() : "",
   );
 
-  const [baseSku, setBaseSku] = useState(initialData?.baseSku ?? "");
+  const [baseSku, setBaseSku] = useState(seed?.baseSku ?? "");
 
   const [description, setDescription] = useState(
-    initialData?.description ?? "",
+    seed?.description ?? "",
   );
 
-  const [isActive, setIsActive] = useState(initialData?.isActive ?? true);
+  const [isActive, setIsActive] = useState(seed?.isActive ?? true);
 
   // IMAGE STATE
 
@@ -262,7 +301,7 @@ export default function AdminProductForm({
   const variantImageInputRef = useRef<HTMLInputElement>(null);
 
   const [variants, setVariants] = useState<AddedVariant[]>(() => {
-    if (!initialData || initialData.variants.length === 0) {
+    if (!seed || seed.variants.length === 0) {
       return [];
     }
 
@@ -270,28 +309,34 @@ export default function AdminProductForm({
       return [];
     }
 
-    return initialData.variants.map((variant) => ({
-      id: crypto.randomUUID(),
+    return seed.variants.map((variant, index) => {
+      // Only a real edit's variants carry a usable existing id/image — a
+      // prefilled create has neither, since nothing was ever persisted.
+      const original = initialData?.variants[index];
 
-      existingVariantId: variant.id,
+      return {
+        id: crypto.randomUUID(),
 
-      sku: variant.sku,
+        existingVariantId: original?.id,
 
-      colorId: variant.colorId,
+        sku: variant.sku,
 
-      colorName: variant.colorName,
+        colorId: variant.colorId,
 
-      sizeId: variant.sizeId,
+        colorName: variant.colorName,
 
-      sizeName: variant.sizeName,
+        sizeId: variant.sizeId,
 
-      price: variant.price,
-      quantity: variant.stock,
+        sizeName: variant.sizeName,
 
-      existingImageUrl: variant.imageUrl ?? null,
-      existingImagePublicId: variant.imagePublicId ?? null,
-      selectedImage: null,
-    }));
+        price: variant.price,
+        quantity: variant.stock,
+
+        existingImageUrl: original?.imageUrl ?? null,
+        existingImagePublicId: original?.imagePublicId ?? null,
+        selectedImage: null,
+      };
+    });
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1235,6 +1280,34 @@ export default function AdminProductForm({
         return;
       }
 
+      if (retryContext) {
+        const productId = isEditMode
+          ? initialData!.id
+          : (result.data?.id as string);
+
+        try {
+          await fetch(
+            `/api/admin/jobs/${retryContext.jobId}/items/${retryContext.itemId}/resolve`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                productId,
+                action: isEditMode ? "Updated" : "Inserted",
+              }),
+            },
+          );
+        } catch (resolveError) {
+          // The product itself saved fine -- this is just bookkeeping on the
+          // job's row, so don't fail the whole operation over it.
+          console.error("Job item resolve error:", resolveError);
+        }
+
+        router.push(`/admin/products/import/${retryContext.jobId}`);
+        router.refresh();
+        return;
+      }
+
       router.push("/admin/products");
 
       router.refresh();
@@ -1264,15 +1337,33 @@ export default function AdminProductForm({
         <div className="mb-5">
           <button
             type="button"
-            onClick={() => router.push("/admin/products")}
+            onClick={() =>
+              router.push(
+                retryContext
+                  ? `/admin/products/import/${retryContext.jobId}`
+                  : "/admin/products",
+              )
+            }
             className="flex items-center gap-2 text-left"
           >
             <ArrowLeft size={16} className="text-blue-600" />
 
             <span className="text-xl font-semibold tracking-tight text-gray-900">
-              {isEditMode ? "Edit Product" : "Add a Single Product"}
+              {isEditMode
+                ? retryContext
+                  ? "Fix & Retry Product"
+                  : "Edit Product"
+                : retryContext
+                  ? "Fix & Retry Product"
+                  : "Add a Single Product"}
             </span>
           </button>
+
+          {retryContext?.errorMessage ? (
+            <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+              Originally failed: {retryContext.errorMessage}
+            </p>
+          ) : null}
 
           <div className="mt-5 border-b border-gray-200" />
         </div>

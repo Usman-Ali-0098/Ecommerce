@@ -12,7 +12,7 @@ import {
 import { validateRequest } from "@/lib/validate-request";
 import { adminNotificationActionSchema } from "@/lib/validations/admin";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const admin =
       await getAdminSession();
@@ -30,8 +30,19 @@ export async function GET() {
       );
     }
 
+    const url = new URL(request.url);
+
+    const cursor = url.searchParams.get("cursor");
+
+    const parsedLimit = Number(url.searchParams.get("limit"));
+
+    const limit =
+      Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 50
+        ? parsedLimit
+        : 10;
+
     const [
-      notifications,
+      notificationsPage,
       unreadCount,
     ] =
       await Promise.all([
@@ -41,11 +52,19 @@ export async function GET() {
               "desc",
           },
 
-          take: 10,
+          take: limit + 1,
+
+          ...(cursor
+            ? {
+                cursor: { id: cursor },
+                skip: 1,
+              }
+            : {}),
 
           select: {
             id: true,
             orderId: true,
+            jobRunId: true,
             type: true,
             title: true,
             message: true,
@@ -61,12 +80,24 @@ export async function GET() {
         }),
       ]);
 
+    const hasMore = notificationsPage.length > limit;
+
+    const notifications = hasMore
+      ? notificationsPage.slice(0, limit)
+      : notificationsPage;
+
+    const nextCursor = hasMore
+      ? notifications[notifications.length - 1].id
+      : null;
+
     return NextResponse.json({
       success: true,
 
       data: {
         notifications,
         unreadCount,
+        nextCursor,
+        hasMore,
       },
     });
   } catch (error) {

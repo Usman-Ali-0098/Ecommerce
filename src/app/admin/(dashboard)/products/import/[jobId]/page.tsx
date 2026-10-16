@@ -13,7 +13,7 @@ export default async function ImportJobPage({ params }: ImportJobPageProps) {
 
   const job = await prisma.jobRun.findUnique({
     where: { id: jobId, type: "PRODUCT_IMPORT" },
-    include: { items: { orderBy: { rowIndex: "asc" } } },
+    include: { items: { orderBy: [{ chunkIndex: "asc" }, { rowIndex: "asc" }] } },
   });
 
   if (!job) {
@@ -43,9 +43,16 @@ export default async function ImportJobPage({ params }: ImportJobPageProps) {
         initialStatus={job.status}
         initialSummary={job.summary}
         initialError={job.error}
+        initialPhase={job.phase}
+        initialTotalRows={job.totalRows}
+        initialTotalItems={job.totalItems}
+        initialProcessedItems={job.processedItems}
+        initialSuccessCount={job.successCount}
+        initialFailedCount={job.failedCount}
         initialItems={job.items.map((item) => ({
           id: item.id,
           rowIndex: item.rowIndex,
+          chunkIndex: item.chunkIndex,
           status: item.status,
           message: item.message,
           productId: item.productId,

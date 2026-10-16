@@ -7,10 +7,6 @@ import { retryPaymentParamsSchema } from "@/lib/validations/payment";
 
 type RouteContext = { params: Promise<{ orderId: string }> };
 
-/** Same data /checkout/[sessionId]'s server component fetches directly --
- * exposed here so the chat widget's retry flow (client-side) can resume a
- * failed order the same way that page does: shipping already on file,
- * jump straight to payment. */
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const user = await getUserSession();

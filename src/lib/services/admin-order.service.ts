@@ -19,51 +19,51 @@ export async function getAdminOrders({
   const where = {
     ...(status
       ? {
-          status:
-            status as
-              | "PENDING"
-              | "PROCESSING"
-              | "SHIPPED"
-              | "DELIVERED"
-              | "CANCELLED",
-        }
+        status:
+          status as
+          | "PENDING"
+          | "PROCESSING"
+          | "SHIPPED"
+          | "DELIVERED"
+          | "CANCELLED",
+      }
       : {}),
 
     ...(search
       ? {
-          OR: [
-            {
-              orderNumber: {
+        OR: [
+          {
+            orderNumber: {
+              contains:
+                search,
+              mode:
+                "insensitive" as const,
+            },
+          },
+
+          {
+            user: {
+              email: {
                 contains:
                   search,
                 mode:
                   "insensitive" as const,
               },
             },
+          },
 
-            {
-              user: {
-                email: {
-                  contains:
-                    search,
-                  mode:
-                    "insensitive" as const,
-                },
+          {
+            user: {
+              fullName: {
+                contains:
+                  search,
+                mode:
+                  "insensitive" as const,
               },
             },
-
-            {
-              user: {
-                fullName: {
-                  contains:
-                    search,
-                  mode:
-                    "insensitive" as const,
-                },
-              },
-            },
-          ],
-        }
+          },
+        ],
+      }
       : {}),
   };
 
@@ -229,7 +229,7 @@ export async function getAdminOrders({
           1,
           Math.ceil(
             total /
-              pageSize
+            pageSize
           )
         ),
     },
@@ -376,9 +376,9 @@ export async function getAdminOrderById(
 
           const primaryImage = item.imageUrl
             ? {
-                url: item.imageUrl,
-                altText: item.imageAltText,
-              }
+              url: item.imageUrl,
+              altText: item.imageAltText,
+            }
             :
             images.find(
               (image) =>
@@ -427,14 +427,14 @@ export async function getAdminOrderById(
             image:
               primaryImage
                 ? {
-                    url:
-                      primaryImage
-                        .url,
+                  url:
+                    primaryImage
+                      .url,
 
-                    altText:
-                      primaryImage
-                        .altText,
-                  }
+                  altText:
+                    primaryImage
+                      .altText,
+                }
                 : null,
           };
         }

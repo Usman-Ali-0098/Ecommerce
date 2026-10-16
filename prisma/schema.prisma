@@ -283,27 +283,48 @@ model Notification {
 model AdminNotification {
   id        String                @id @default(cuid())
   orderId   String?
+  jobRunId  String?               @unique
   type      AdminNotificationType
   title     String
   message   String
   isRead    Boolean               @default(false)
   createdAt DateTime              @default(now())
   order     Order?                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  jobRun    JobRun?               @relation(fields: [jobRunId], references: [id], onDelete: SetNull)
 
   @@index([isRead])
   @@index([createdAt])
   @@index([orderId])
 }
 
-// Written by the FastAPI/Celery jobs service (raw SQL, not Prisma) when it
-// accepts and processes a job; read here via Prisma so the app can poll
-// status/results without round-tripping through FastAPI. Prisma still owns
-// the schema/migrations for these tables.
+// Written by the Python jobs service through SQLAlchemy; read here with
+// Prisma so the app can poll status/results without calling the worker API.
+// Prisma owns the schema and migrations for these tables.
 model JobRun {
   id          String       @id @default(cuid())
   type        JobType
   status      JobStatus    @default(QUEUED)
   requestedBy Int?
+  // PRODUCT_IMPORT CSV source and progress. Null for other job types.
+  cloudinaryPublicId  String?   @unique
+  cloudinarySecureUrl String?
+  cloudinaryVersion   String?
+  originalFilename    String?
+  sizeBytes           Int?
+  idempotencyKey      String?   @unique
+  celeryTaskId        String?
+  phase               String?
+  attempt             Int       @default(0)
+  totalRows           Int       @default(0)
+  totalItems          Int       @default(0)
+  processedItems      Int       @default(0)
+  successCount        Int       @default(0)
+  failedCount         Int       @default(0)
+  enqueueAttempts     Int       @default(0)
+  enqueueError        String?
+  enqueuedAt          DateTime?
+  heartbeatAt         DateTime?
+  cleanupAt           DateTime?
   summary     String?
   error       String?
   createdAt   DateTime     @default(now())
@@ -311,6 +332,7 @@ model JobRun {
   startedAt   DateTime?
   finishedAt  DateTime?
   items       JobRunItem[]
+  adminNotification AdminNotification?
 
   @@index([type])
   @@index([status])
@@ -321,15 +343,27 @@ model JobRunItem {
   id        String    @id @default(cuid())
   jobRunId  String
   jobRun    JobRun    @relation(fields: [jobRunId], references: [id], onDelete: Cascade)
+  itemKey   String?
   rowIndex  Int?
+  chunkIndex  Int?
+  productName String?
+  skuSummary  String?
+  // The original CSV row's field values (name, description, categoryName,
+  // variants[{colorName,sizeName,sku,price,stock,imageFilename}]) — saved
+  // only when this item ends up FAILED, so the admin's "retry" page can
+  // prefill a form with what was actually submitted instead of starting blank.
+  rawRow    Json?
   status    JobStatus @default(QUEUED)
   message   String?
   productId String?
+  attempt   Int       @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  @@unique([jobRunId, itemKey])
   @@index([jobRunId])
   @@index([status])
+  @@index([jobRunId, chunkIndex])
 }
 
 enum JobType {
@@ -395,6 +429,7 @@ enum AdminNotificationType {
   NEW_ORDER
   ORDER_CANCELLED
   KNOWLEDGE_REINDEX
+  PRODUCT_IMPORT
 }
 
 // --- Chatbot: RAG knowledge index ---------------------------------------

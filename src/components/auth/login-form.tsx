@@ -43,6 +43,8 @@ export default function LoginForm() {
 
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
+  const [isFacebookSubmitting, setIsFacebookSubmitting] = useState(false);
+
   /*
    * --------------------------------
    * UPDATE FIELD
@@ -95,6 +97,37 @@ export default function LoginForm() {
       setIsGoogleSubmitting(false);
 
       showAlert("Unable to continue with Google.", {
+        variant: "error",
+      });
+    }
+  }
+
+  /*
+   * --------------------------------
+   * FACEBOOK LOGIN
+   * --------------------------------
+   */
+  async function handleFacebookSignIn() {
+    try {
+      setIsFacebookSubmitting(true);
+
+      /*
+       * Facebook authentication is
+       * customer-only in auth.ts.
+       *
+       * Auth.js handles the redirect
+       * through Facebook and returns
+       * the customer to "/".
+       */
+      await signIn("facebook", {
+        callbackUrl: "/",
+      });
+    } catch (error) {
+      console.error("Facebook login error:", error);
+
+      setIsFacebookSubmitting(false);
+
+      showAlert("Unable to continue with Facebook.", {
         variant: "error",
       });
     }
@@ -250,7 +283,7 @@ export default function LoginForm() {
             placeholder="Enter your email"
             value={form.email}
             error={errors.email}
-            disabled={isSubmitting || isGoogleSubmitting}
+            disabled={isSubmitting || isGoogleSubmitting || isFacebookSubmitting}
             onChange={(event) => updateField("email", event.target.value)}
           />
 
@@ -265,7 +298,7 @@ export default function LoginForm() {
             placeholder="Enter your password"
             value={form.password}
             error={errors.password}
-            disabled={isSubmitting || isGoogleSubmitting}
+            disabled={isSubmitting || isGoogleSubmitting || isFacebookSubmitting}
             onChange={(event) => updateField("password", event.target.value)}
           />
 
@@ -277,7 +310,7 @@ export default function LoginForm() {
               name="rememberMe"
               label="Remember me"
               checked={rememberMe}
-              disabled={isSubmitting || isGoogleSubmitting}
+              disabled={isSubmitting || isGoogleSubmitting || isFacebookSubmitting}
               onChange={(event) => setRememberMe(event.target.checked)}
             />
 
@@ -295,7 +328,7 @@ export default function LoginForm() {
             type="submit"
             fullWidth
             loading={isSubmitting}
-            disabled={isSubmitting || isGoogleSubmitting}
+            disabled={isSubmitting || isGoogleSubmitting || isFacebookSubmitting}
           >
             Sign In
           </Button>
@@ -317,7 +350,7 @@ export default function LoginForm() {
           <button
             type="button"
             onClick={handleGoogleSignIn}
-            disabled={isSubmitting || isGoogleSubmitting}
+            disabled={isSubmitting || isGoogleSubmitting || isFacebookSubmitting}
             className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <svg
@@ -347,6 +380,28 @@ export default function LoginForm() {
             </svg>
 
             {isGoogleSubmitting ? "Connecting..." : "Continue with Google"}
+          </button>
+
+          {/* Facebook */}
+
+          <button
+            type="button"
+            onClick={handleFacebookSignIn}
+            disabled={isSubmitting || isGoogleSubmitting || isFacebookSubmitting}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0"
+            >
+              <path
+                fill="#1877F2"
+                d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.063 24 12.073z"
+              />
+            </svg>
+
+            {isFacebookSubmitting ? "Connecting..." : "Continue with Facebook"}
           </button>
 
           {/* Signup */}

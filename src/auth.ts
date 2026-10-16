@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Facebook from "next-auth/providers/facebook";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 
@@ -27,6 +28,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.AUTH_GOOGLE_ID!,
 
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+    }),
+
+    /*
+     * Facebook OAuth for customer
+     * authentication.
+     */
+    Facebook({
+      clientId: process.env.AUTH_FACEBOOK_ID!,
+
+      clientSecret: process.env.AUTH_FACEBOOK_SECRET!,
     }),
 
     /*
@@ -123,46 +134,59 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
        * Credentials authentication was
        * already handled by authorize().
        */
-      if (account?.provider !== "google") {
+      if (account?.provider !== "google" && account?.provider !== "facebook") {
         return true;
       }
 
+      const provider = account.provider;
+
       const email = user.email?.trim().toLowerCase();
 
-      // Why not use email as the Google account identifier?  Email is an address and linking attribute. sub is the provider’s stable identity identifier.
+      /*
+       * Auth.js always populates
+       * account.providerAccountId from
+       * the provider's own stable user
+       * id (profile.sub for Google,
+       * profile.id for Facebook), so it
+       * doesn't need to be read from the
+       * raw profile by hand.
+       */
+      const providerAccountId = account.providerAccountId;
 
-      const googleAccountId =
-        typeof profile?.sub === "string" ? profile.sub : null;
-
-      if (!email || !googleAccountId) {
+      if (!email || !providerAccountId) {
         return false;
       }
 
       /*
-       * Require Google's verified
-       * email claim.
+       * Google exposes a verified-email
+       * claim. Facebook's Graph API only
+       * ever returns an email once it's
+       * already confirmed, so there's no
+       * equivalent claim to check there.
        */
-      const emailVerified =
-        profile &&
-        "email_verified" in profile &&
-        profile.email_verified === true;
-      // This matters because the project uses email to link an existing credentials customer with a Googleaccount.
+      if (provider === "google") {
+        const emailVerified =
+          profile &&
+          "email_verified" in profile &&
+          profile.email_verified === true;
+        // This matters because the project uses email to link an existing credentials customer with a Google account.
 
-      if (!emailVerified) {
-        return false;
+        if (!emailVerified) {
+          return false;
+        }
       }
 
       /*
        * CASE 1
        *
-       * Google account already exists.
+       * OAuth account already exists.
        */
-      const existingGoogleAccount = await prisma.account.findUnique({
+      const existingOAuthAccount = await prisma.account.findUnique({
         where: {
           provider_providerAccountId: {
-            provider: "google",
+            provider,
 
-            providerAccountId: googleAccountId,
+            providerAccountId,
           },
         },
 
@@ -171,17 +195,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
       });
 
-      if (existingGoogleAccount) {
+      if (existingOAuthAccount) {
         /*
          * Never authenticate ADMIN
-         * through customer Google OAuth.
+         * through customer OAuth.
          */
-        if (existingGoogleAccount.user.role !== "USER") {
+        if (existingOAuthAccount.user.role !== "USER") {
           return false;
         }
 
         try {
-          await ensureStripeCustomer({ userId: existingGoogleAccount.user.id });
+          await ensureStripeCustomer({ userId: existingOAuthAccount.user.id });
         } catch (error) {
           console.error("Deferred Stripe customer creation:", error);
         }
@@ -193,7 +217,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
        * CASE 2
        *
        * Existing credentials customer
-       * uses Google for the first time.
+       * uses OAuth for the first time.
        */
       const existingUser = await prisma.user.findUnique({
         where: {
@@ -207,7 +231,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         /*
-         * Link Google account to the
+         * Link the OAuth account to the
          * existing customer.
          */
         await prisma.account.create({
@@ -216,9 +240,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             type: "oauth",
 
-            provider: "google",
+            provider,
 
-            providerAccountId: googleAccountId,
+            providerAccountId,
           },
         });
 
@@ -234,7 +258,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       /*
        * CASE 3
        *
-       * Completely new Google customer.
+       * Completely new OAuth customer.
        */
       const fullName = user.name?.trim() || "Customer";
 
@@ -265,9 +289,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             type: "oauth",
 
-            provider: "google",
+            provider,
 
-            providerAccountId: googleAccountId,
+            providerAccountId,
           },
         });
 
@@ -285,22 +309,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     ///////////////////////////////////////////////////////////
 
-    async jwt({ token, user, account, profile }) {
+    async jwt({ token, user, account }) {
       /*
-       * Initial Google login.
+       * Initial OAuth login
+       * (Google or Facebook).
 
 
        */
-      if (account?.provider === "google") {
-        const googleAccountId =
-          typeof profile?.sub === "string" ? profile.sub : null;
+      if (account?.provider === "google" || account?.provider === "facebook") {
+        const providerAccountId = account.providerAccountId;
 
-        if (!googleAccountId) {
+        if (!providerAccountId) {
           return null;
         }
 
         /*
-         * Google
+         * Google / Facebook
          *    ↓
          * Account
          *    ↓
@@ -308,7 +332,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
          *
          * ## 19. Preventing provider identity from becoming application authority
 
-  Google provides data such as:
+  Google/Facebook provide data such as:
 
   email
   name
@@ -325,9 +349,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const databaseAccount = await prisma.account.findUnique({
           where: {
             provider_providerAccountId: {
-              provider: "google",
+              provider: account.provider,
 
-              providerAccountId: googleAccountId,
+              providerAccountId,
             },
           },
 
@@ -350,7 +374,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         token.rememberMe = false;
 
-        token.authProvider = "google";
+        token.authProvider = account.provider;
 
         token.authenticatedRole = "USER";
 
@@ -448,10 +472,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       /*
-       * Google remains a customer-only authentication path.
+       * Google/Facebook remain a customer-only authentication path.
        */
       if (
-        token.authProvider === "google" &&
+        (token.authProvider === "google" || token.authProvider === "facebook") &&
         currentUser.role !== "USER"
       ) {
         return null;

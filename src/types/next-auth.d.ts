@@ -37,7 +37,7 @@ declare module "next-auth/jwt" {
 
     sessionExpiresAt?: number;
 
-    authProvider?: "credentials" | "google";
+    authProvider?: "credentials" | "google" | "facebook";
 
     authenticatedRole?: "USER" | "ADMIN";
 

@@ -98,13 +98,13 @@ export async function getUserOrders({
 
     ...(status
       ? {
-          status: status as
-            | "PENDING"
-            | "PROCESSING"
-            | "SHIPPED"
-            | "DELIVERED"
-            | "CANCELLED",
-        }
+        status: status as
+          | "PENDING"
+          | "PROCESSING"
+          | "SHIPPED"
+          | "DELIVERED"
+          | "CANCELLED",
+      }
       : {}),
   };
 
@@ -232,11 +232,7 @@ export async function getUserOrderById(userId: number, orderId: string) {
     0,
   );
 
-  // Reorder needs to know how much of each variant is already sitting in
-  // the cart, so a revisit shows "already in your cart" instead of a blank
-  // "Add to cart" button that would just pile more on top on every click.
-  // Only fetched for cancelled orders — every other order status renders
-  // exactly as before, at no extra query cost.
+
   const cartQuantityByVariant: Record<string, number> = {};
   if (order.status === "CANCELLED") {
     const variantIds = order.items
@@ -297,15 +293,6 @@ export async function getUserOrderById(userId: number, orderId: string) {
 
     paymentRetryExpiresAt: order.paymentRetryExpiresAt,
 
-    // Whether there's an attempt currently in flight — used only to pick
-    // banner wording ("resume" vs "start a new attempt"), never to decide
-    // whether the retry button shows at all. The previous version gated
-    // visibility on this (and specifically on stripeCheckoutSessionId,
-    // which retry-created attempts never set since they're PaymentIntent-
-    // based), so the button vanished the instant a retry was started but
-    // not finished. createStripeRetryPaymentIntent already resumes an
-    // open attempt instead of duplicating it, so visibility only needs to
-    // track the order-level retry budget below.
     hasActivePaymentAttempt: Boolean(
       order.paymentAttempts.find((attempt) =>
         ["UNPAID", "PROCESSING", "REQUIRES_ACTION"].includes(attempt.status) &&
@@ -674,11 +661,6 @@ export async function getOrderCheckoutForDisplay(userId: number, orderId: string
       id: orderId,
       userId,
       status: "PENDING",
-      // A freshly-failed order sits at FAILED (or REQUIRES_ACTION mid-3DS,
-      // or EXPIRED) until a retry actually reserves it and flips it to
-      // UNPAID — this page has to render for all of those, not just the
-      // already-reserved UNPAID case, or the very first "Retry payment"
-      // click on a failed order 404s instead of showing the payment form.
       paymentStatus: { in: ["UNPAID", "FAILED", "REQUIRES_ACTION", "EXPIRED"] },
     },
     include: {
@@ -771,10 +753,7 @@ export async function reserveExistingOrderForRetry(userId: number, orderId: stri
       );
     }
 
-    // No cap on attempt count — a customer can retry as many times as they
-    // like, as long as they're still inside paymentRetryExpiresAt. That
-    // fixed deadline (not an attempt tally) is what actually determines
-    // whether the order is still payable.
+
     const claimed = await tx.order.updateMany({
       where: {
         id: order.id,

@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   const job = await prisma.jobRun.findUnique({
     where: { id },
-    include: { items: { orderBy: { rowIndex: "asc" } } },
+    include: { items: { orderBy: [{ chunkIndex: "asc" }, { rowIndex: "asc" }] } },
   });
 
   if (!job) {
@@ -33,9 +33,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
       status: job.status,
       summary: job.summary,
       error: job.error,
+      phase: job.phase,
+      totalRows: job.totalRows,
+      totalItems: job.totalItems,
+      processedItems: job.processedItems,
+      successCount: job.successCount,
+      failedCount: job.failedCount,
       items: job.items.map((item) => ({
         id: item.id,
         rowIndex: item.rowIndex,
+        chunkIndex: item.chunkIndex,
         status: item.status,
         message: item.message,
         productId: item.productId,
