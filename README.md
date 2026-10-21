@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+> **Companion repo:** bulk CSV import, order-expiry sweeps, and email
+> dispatch run in a separate background jobs service (FastAPI + Celery) —
+> see **[Ecommerce-Jobs-Service](https://github.com/Usman-Ali-0098/-Ecommerce-Jobs-Service)**.
+
 ## Getting Started
 
 First, run the development server:
